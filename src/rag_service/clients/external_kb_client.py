@@ -6,6 +6,7 @@ It handles request/response transformation and error handling.
 """
 
 import asyncio
+import json
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -75,6 +76,7 @@ class ExternalKBClientConfig(BaseModel):
     endpoint: str = Field("/cloudoa-ai/ai/file-knowledge/queryKnowledge", description="API endpoint")
     timeout: int = Field(30, description="Request timeout in seconds")
     max_retries: int = Field(3, description="Maximum retry attempts")
+    xtoken: str = Field("", description="X-Token header for authentication")
 
 
 class ExternalKBClient:
@@ -184,16 +186,33 @@ class ExternalKBClient:
                 # Debug logging
                 logger.info(f"Making request to full URL: {url}")
 
+                # Build headers
+                headers = {"Content-Type": "application/json"}
+                if self._config.xtoken:
+                    headers["xtoken"] = self._config.xtoken
+
+                # Serialize JSON with ensure_ascii=True to match requests library behavior
+                # This is required because the external KB API expects Unicode escapes for Chinese characters
+                body = json.dumps(request.model_dump(by_alias=True, exclude_none=True), ensure_ascii=True)
+
                 response = await client.post(
                     url,
-                    json=request.model_dump(by_alias=True, exclude_none=True),
-                    headers={"Content-Type": "application/json"},
+                    content=body.encode("utf-8"),
+                    headers=headers,
                 )
 
                 response.raise_for_status()
 
                 # Parse response
                 data = response.json()
+                logger.info(f"Raw response: code={data.get('code')}, msg={data.get('msg')}, result_count={len(data.get('result', []))}")
+
+                # Check for error codes
+                if data.get('code') != 200:
+                    logger.warning(f"External KB returned error code {data.get('code')}: {data.get('msg')}")
+                    # Return empty results instead of raising error
+                    return []
+
                 external_response = ExternalKBResponse(**data)
 
                 # Transform to internal format
@@ -338,6 +357,8 @@ async def get_external_kb_client() -> ExternalKBClient:
 
         config = ExternalKBClientConfig(
             base_url=settings.external_kb.base_url,
+            endpoint=getattr(settings.external_kb, "endpoint", "/cloudoa-ai/ai/file-knowledge/queryKnowledge"),
+            xtoken=getattr(settings.external_kb, "token", ""),
             timeout=getattr(settings.external_kb, "timeout", 30),
             max_retries=getattr(settings.external_kb, "max_retries", 3),
         )

@@ -1,184 +1,99 @@
-# External Knowledge Base Configuration
+# 外部知识库配置指南
 
-## Overview
+## 概述
 
-The RAG Service can query an external HTTP knowledge base service to retrieve relevant documents and chunks. This guide shows you how to configure it.
+外部知识库服务需要认证 token 才能访问。
 
-## Environment Variables
+## 环境变量配置
 
-Create a `.env` file in the project root with the following variables:
+创建或编辑 `.env` 文件：
 
 ```bash
-# External HTTP Knowledge Base Configuration
-EXTERNAL_KB_BASE_URL=http://128.23.77.226:9981
-EXTERNAL_KB_ENDPOINT=/ai-parsing-file/ai/file-knowledge/queryKnowledge
+# 外部知识库配置
+EXTERNAL_KB_BASE_URL=http://128.23.77.226:6719
+EXTERNAL_KB_ENDPOINT=/cloudoa-ai/ai/file-knowledge/queryKnowledge
+EXTERNAL_KB_TOKEN=123456fdsaga6
 EXTERNAL_KB_TIMEOUT=30
 EXTERNAL_KB_MAX_RETRIES=3
 EXTERNAL_KB_ENABLED=true
 ```
 
-### Variable Descriptions
+### 参数说明
 
-| Variable | Description | Example | Default |
-|----------|-------------|---------|---------|
-| `EXTERNAL_KB_BASE_URL` | Base URL of the external KB service | `http://128.23.77.226:9981` | (required) |
-| `EXTERNAL_KB_ENDPOINT` | API endpoint path | `/ai-parsing-file/ai/file-knowledge/queryKnowledge` | `/ai-parsing-file/ai/file-knowledge/queryKnowledge` |
-| `EXTERNAL_KB_TIMEOUT` | Request timeout in seconds | `30` | `30` |
-| `EXTERNAL_KB_MAX_RETRIES` | Maximum retry attempts for failed requests | `3` | `3` |
-| `EXTERNAL_KB_ENABLED` | Enable/disable external KB integration | `true` | `true` |
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `EXTERNAL_KB_BASE_URL` | 外部知识库服务地址 | `http://128.23.77.226:6719` |
+| `EXTERNAL_KB_ENDPOINT` | API 端点路径 | `/cloudoa-ai/ai/file-knowledge/queryKnowledge` |
+| `EXTERNAL_KB_TOKEN` | 认证 Token | `123456fdsaga6` |
+| `EXTERNAL_KB_TIMEOUT` | 请求超时时间（秒） | `30` |
+| `EXTERNAL_KB_MAX_RETRIES` | 最大重试次数 | `3` |
 
-## API Request Format
+## 使用方法
 
-The external KB client sends requests in this format:
-
-```json
-{
-  "query": "search query text",
-  "compId": "N000131",
-  "fileType": "PublicDocDispatch",
-  "docDate": "",
-  "keyword": "",
-  "topk": 10,
-  "scoreMin": 0.0,
-  "searchType": 1
-}
-```
-
-### Request Parameters
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `query` | string | Yes | Primary search query |
-| `compId` | string | Yes | Company unique code (e.g., N000131) |
-| `fileType` | string | Yes | File type: `PublicDocReceive` or `PublicDocDispatch` |
-| `docDate` | string | No | Document date filter |
-| `keyword` | string | No | Secondary search keyword |
-| `topk` | int | No | Number of results to return (default: 10) |
-| `scoreMin` | float | No | Minimum score threshold (default: 0.0) |
-| `searchType` | int | Yes | Search type: 0=vector, 1=fulltext, 2=hybrid |
-
-## Expected Response Format
-
-The external KB service should return responses in this format:
-
-```json
-{
-  "result": [
-    {
-      "metadata": {
-        "score": 0.95,
-        "position": 1,
-        "_source": "data_source_name",
-        "dataset_id": "dataset_123",
-        "dataset_name": "My Dataset",
-        "document_id": "doc_456",
-        "document_name": "Document.pdf",
-        "data_source_type": "file",
-        "segment_id": "seg_789",
-        "retriever_from": "external_kb",
-        "doc_metadata": {
-          "author": "John Doe",
-          "created_date": "2025-01-01"
-        }
-      },
-      "title": "Document Title",
-      "content": "The actual chunk content text..."
-    }
-  ]
-}
-```
-
-## Testing the Configuration
-
-### 1. Test with Mock Mode (No Service Required)
+### 1. 使用环境变量
 
 ```bash
-uv run python -m e2e_test.cli external-kb \
+# 设置环境变量
+export EXTERNAL_KB_TOKEN=123456fdsaga6
+
+# 运行测试
+python -m e2e_test.cli external-kb \
     questions/fianl_version_qa.jsonl \
-    --base-url http://localhost:8001 \
-    --mock \
-    --limit 5
+    --base-url http://128.23.77.226:6719 \
+    --xtoken 123456fdsaga6
 ```
 
-### 2. Test with Real Service
+### 2. 使用命令行参数
 
 ```bash
-# Make sure your .env file has EXTERNAL_KB_BASE_URL set
-uv run python -m e2e_test.cli external-kb \
+python -m e2e_test.cli external-kb \
     questions/fianl_version_qa.jsonl \
-    --base-url http://128.23.77.226:9981 \
+    --base-url http://128.23.77.226:6719 \
+    --xtoken 123456fdsaga6 \
     --output results.json \
     --limit 10
 ```
 
-### 3. Manual API Test with curl
+### 3. 使用独立测试脚本
 
-```bash
-curl -X POST "http://128.23.77.226:9981/ai-parsing-file/ai/file-knowledge/queryKnowledge" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "test query",
-    "compId": "N000131",
-    "fileType": "PublicDocDispatch",
-    "searchType": 1,
-    "topk": 5
-  }'
+编辑 `run_external_kb_test.py` 中的配置：
+
+```python
+xtoken = "123456fdsaga6"  # 修改为你的 token
 ```
 
-## Troubleshooting
-
-### Service Not Responding (502 Bad Gateway)
-
-1. **Check if service is running:**
-   ```bash
-   curl http://your-service-url:port/health
-   ```
-
-2. **Check network connectivity:**
-   ```bash
-   ping your-service-url
-   ```
-
-3. **Verify the endpoint path is correct**
-
-### Timeout Errors
-
-Increase `EXTERNAL_KB_TIMEOUT` in your `.env` file:
-```bash
-EXTERNAL_KB_TIMEOUT=60
-```
-
-### Connection Refused
-
-1. Check firewall settings
-2. Verify the service port is accessible
-3. Check if the service is binding to the correct interface (0.0.0.0 vs localhost)
-
-### Authentication Issues
-
-If your external KB requires authentication, you may need to modify `ExternalKBClient` to add headers. Check the service documentation for required authentication methods.
-
-## Example .env File
+然后运行：
 
 ```bash
-# RAG Service Configuration
-
-# External Knowledge Base
-EXTERNAL_KB_BASE_URL=http://128.23.77.226:9981
-EXTERNAL_KB_ENDPOINT=/ai-parsing-file/ai/file-knowledge/queryKnowledge
-EXTERNAL_KB_TIMEOUT=30
-EXTERNAL_KB_MAX_RETRIES=3
-EXTERNAL_KB_ENABLED=true
-
-# Server Configuration
-HOST=0.0.0.0
-PORT=8000
-LOG_LEVEL=INFO
+python run_external_kb_test.py
 ```
 
-## Next Steps
+## 请求头
 
-1. Set up your `.env` file with the correct values
-2. Test connectivity with curl
-3. Run the E2E test with `--mock` flag to verify the framework
-4. Run with real service to validate the integration
+每个请求会自动包含以下请求头：
+
+```http
+POST /cloudoa-ai/ai/file-knowledge/queryKnowledge HTTP/1.1
+Host: 128.23.77.226:6719
+Content-Type: application/json
+xtoken: 123456fdsaga6
+```
+
+## 安全建议
+
+1. **不要在代码中硬编码 token**
+2. **使用环境变量或配置文件**
+3. **将 `.env` 文件添加到 `.gitignore`**
+4. **定期更换 token**
+
+## 故障排除
+
+### 401/403 错误
+
+- 检查 `EXTERNAL_KB_TOKEN` 是否正确
+- 确认 token 是否有效
+
+### 404 错误
+
+- 确认 `EXTERNAL_KB_BASE_URL` 正确
+- 确认 `EXTERNAL_KB_ENDPOINT` 正确

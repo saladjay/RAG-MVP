@@ -213,9 +213,10 @@ class ExternalKBConfig(BaseSettings):
 
     base_url: str = Field(default="", description="External KB base URL")
     endpoint: str = Field(
-        default="/ai-parsing-file/ai/file-knowledge/queryKnowledge",
+        default="/cloudoa-ai/ai/file-knowledge/queryKnowledge",
         description="External KB API endpoint"
     )
+    token: str = Field(default="", description="X-Token header for authentication")
     timeout: int = Field(default=30, description="Request timeout in seconds")
     max_retries: int = Field(default=3, description="Maximum retry attempts")
     enabled: bool = Field(default=True, description="Enable external KB integration")

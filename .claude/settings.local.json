@@ -28,7 +28,13 @@
       "Bash(curl:*)",
       "Bash(echo Testing: $path:*)",
       "Bash(echo Testing port $port...:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(chmod +x:*)",
+      "Bash(cd \"D:\\\\project\\\\OA\\\\svn\\\\代码组件\" && cp kb_connect_test.py kb_test_copy.py && python kb_test_copy.py 2>&1)",
+      "Bash(cd \"D:\\\\project\\\\OA\\\\svn\\\\代码组件\" && cp kb_connect_test.py test_renamed.py && python test_renamed.py 2>&1)",
+      "Bash(cd \"D:\\\\project\\\\OA\\\\svn\\\\代码组件\" && rm -f compare_http_clients.py copy_kb_test.py debug_*.py direct_compare.py sequential_test.py side_by_side_test.py simple_*.py temp_test.py test_*.py kb_*.py minimal_test.py 2>&1)",
+      "Bash(cd \"D:\\\\project\\\\OA\\\\svn\\\\代码组件\" && rm -f external_kb_results.json knowledge-base-api.html README2.md && rm -f .coverage && rm -rf .pytest_cache 2>&1)",
+      "Bash(cd \"D:\\\\project\\\\OA\\\\svn\\\\代码组件\" && rm -f run_external_kb_test.py 2>&1)"
     ]
   }
 }

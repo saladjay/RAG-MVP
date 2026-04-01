@@ -96,6 +96,7 @@ class ExternalKBTestRunner:
         search_type: int = 1,
         topk: int = 10,
         endpoint: str = "/cloudoa-ai/ai/file-knowledge/queryKnowledge",
+        xtoken: str = "",
     ) -> None:
         """Initialize the external KB test runner.
 
@@ -106,6 +107,7 @@ class ExternalKBTestRunner:
             search_type: Search type (0=vector, 1=fulltext, 2=hybrid).
             topk: Number of results to retrieve.
             endpoint: API endpoint path.
+            xtoken: X-Token header for authentication.
         """
         self.base_url = base_url
         self.comp_id = comp_id
@@ -113,6 +115,7 @@ class ExternalKBTestRunner:
         self.search_type = search_type
         self.topk = topk
         self.endpoint = endpoint
+        self.xtoken = xtoken
         self._client: Optional[Any] = None
 
     async def _get_client(self) -> Any:
@@ -127,6 +130,7 @@ class ExternalKBTestRunner:
             config = ExternalKBClientConfig(
                 base_url=self.base_url,
                 endpoint=self.endpoint,
+                xtoken=self.xtoken,
                 timeout=30,
                 max_retries=3,
             )
@@ -335,6 +339,7 @@ async def run_external_kb_test(
     search_type: int = 1,
     topk: int = 10,
     endpoint: str = "/cloudoa-ai/ai/file-knowledge/queryKnowledge",
+    xtoken: str = "",
     mock: bool = False,
     limit: int = 0,
 ) -> List[ExternalKBTestResult]:
@@ -349,6 +354,7 @@ async def run_external_kb_test(
         search_type: Search type (0=vector, 1=fulltext, 2=hybrid).
         topk: Number of results to retrieve.
         endpoint: API endpoint path.
+        xtoken: X-Token header for authentication.
         mock: If True, use mock data instead of calling real service.
         limit: Maximum number of tests to run (0 = all).
 
@@ -362,6 +368,7 @@ async def run_external_kb_test(
         search_type=search_type,
         topk=topk,
         endpoint=endpoint,
+        xtoken=xtoken,
     )
 
     try:

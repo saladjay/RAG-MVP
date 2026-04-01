@@ -1,6 +1,6 @@
 # OA Component Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-30
+Auto-generated from all feature plans. Last updated: 2026-04-01
 
 ## Active Technologies
 
@@ -19,17 +19,12 @@ Auto-generated from all feature plans. Last updated: 2026-03-30
 ### Data Storage
 - Milvus - Vector database for knowledge chunks (feature 001)
 
-### CLI Frameworks
-- Typer - Command-line interface framework (feature 004)
-
 ### HTTP Clients
 - httpx - Async HTTP client for SDK and E2E testing (features 002, 003)
-- requests - Sync HTTP client (feature 004)
 
 ### Configuration & Validation
 - Pydantic - Data validation and settings management (features 001, 003)
 - Pydantic Settings - Configuration from environment variables (feature 001)
-- toml - TOML configuration parsing (feature 004)
 
 ### Template Engines
 - Jinja2 - Template rendering for prompt interpolation and HTML reports (features 002, 003)
@@ -45,9 +40,9 @@ Auto-generated from all feature plans. Last updated: 2026-03-30
 - python-json-logger - Structured JSON logging (features 001, 003)
 
 ### Testing
-- pytest - Testing framework (features 001, 003, 004)
+- pytest - Testing framework (features 001, 003)
 - pytest-asyncio - Async test support (features 001, 003)
-- pytest-cov - Coverage reporting (features 001, 003, 004)
+- pytest-cov - Coverage reporting (features 001, 003)
 
 ### Package Management
 - uv - Python dependency management (constitution requirement, feature 004)
@@ -83,12 +78,6 @@ src/
 │   ├── middleware/                 # Caching
 │   └── client/                     # Python SDK
 │
-└── uv_python/                      # Feature 004: UV Python Install
-    ├── cli/                        # Typer CLI
-    ├── core/                       # Exceptions, logger
-    ├── models/                     # Data models
-    └── python_source/              # API clients
-
 └── e2e_test/                       # Feature 002: E2E Test Framework
     ├── cli.py                      # CLI entry point
     ├── parsers/                    # File parsers (JSON/CSV/YAML/MD)
@@ -101,6 +90,12 @@ tests/
 ├── contract/                       # API contract tests
 ├── integration/                    # Service integration tests
 └── unit/                           # Unit tests
+
+scripts/
+└── uv-python/                      # Feature 004: UV Python 脚本工具集
+    ├── list.ps1 / list.sh          # 列出 Python 版本
+    ├── install.ps1 / install.sh    # 安装 Python 版本
+    └── verify.ps1 / verify.sh      # 验证 Python 安装
 ```
 
 **Core Architecture Principle**: All services use a **Capability Interface Layer** between HTTP endpoints and underlying components. This ensures:
@@ -124,6 +119,26 @@ uv run python script.py
 
 # Run tests
 uv run pytest
+
+# Python version management (directly using uv)
+uv python list
+uv python install 3.11.8
+uv python find 3.11
+```
+
+### UV Python 脚本工具集 (Feature 004)
+```powershell
+# Windows PowerShell
+.\scripts\uv-python\list.ps1
+.\scripts\uv-python\install.ps1 -Version 3.11.8
+.\scripts\uv-python\verify.ps1 -Version 3.11.8
+```
+
+```bash
+# Linux/macOS
+./scripts/uv-python/list.sh
+./scripts/uv-python/install.sh --version 3.11.8
+./scripts/uv-python/verify.sh --version 3.11.8
 ```
 
 ### pytest (Testing)

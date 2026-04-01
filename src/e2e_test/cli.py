@@ -335,6 +335,12 @@ def external_kb(
         "-e",
         help="API endpoint path"
     ),
+    xtoken: str = typer.Option(
+        "",
+        "--xtoken",
+        "-x",
+        help="X-Token header for authentication"
+    ),
     mock: bool = typer.Option(
         False,
         "--mock",
@@ -377,6 +383,7 @@ def external_kb(
             search_type=search_type,
             topk=topk,
             endpoint=endpoint,
+            xtoken=xtoken,
             mock=mock,
             limit=limit,
         )
