@@ -14,6 +14,7 @@ Main Application:
 - All routes are registered under /api/v1 prefix
 """
 
+import time
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -31,6 +32,9 @@ from prompt_service.services.langfuse_client import (
 
 logger = get_logger(__name__)
 
+# Store application start time
+_app_start_time: float = 0.0
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -44,6 +48,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Yields:
         None
     """
+    global _app_start_time
+    _app_start_time = time.time()
+
     config = get_config()
 
     # Setup logging
@@ -70,9 +77,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         extra={"langfuse_status": health["status"]}
     )
 
-    # Store client in app state for access in routes
+    # Store client and start time in app state for access in routes
     app.state.langfuse_client = langfuse_client
     app.state.config = config
+    app.state.start_time = _app_start_time
 
     yield
 
@@ -110,7 +118,7 @@ app.add_middleware(
 # ============================================================================
 
 @app.get("/health", tags=["health"])
-async def health_check() -> dict:
+async def health_check(request: Request) -> dict:
     """Get service health status.
 
     Returns the overall health status and component statuses.
@@ -121,6 +129,11 @@ async def health_check() -> dict:
     langfuse_client = get_langfuse_client()
     langfuse_health = langfuse_client.health()
 
+    # Calculate uptime from app state
+    uptime_ms = 0.0
+    if hasattr(request.app.state, "start_time"):
+        uptime_ms = (time.time() - request.app.state.start_time) * 1000
+
     return {
         "status": "healthy" if langfuse_health["status"] == "connected" else "degraded",
         "version": "0.1.0",
@@ -128,7 +141,7 @@ async def health_check() -> dict:
             "langfuse": langfuse_health["status"],
             "cache": "enabled" if config.cache.enabled else "disabled",
         },
-        "uptime_ms": 0.0,  # TODO: Track actual uptime
+        "uptime_ms": uptime_ms,
     }
 
 

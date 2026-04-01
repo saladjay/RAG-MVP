@@ -195,6 +195,8 @@ class ABTest(BaseModel):
         Returns:
             Dictionary mapping variant_id to metrics
         """
+        import math
+
         metrics = {}
 
         control = self.get_control_variant()
@@ -205,12 +207,29 @@ class ABTest(BaseModel):
             if control and not variant.is_control:
                 improvement = variant.success_rate - control_rate
 
+            # Calculate 95% confidence interval using Wilson score interval
+            confidence_interval = None
+            if variant.impressions > 0:
+                # Wilson score interval for binomial proportion
+                n = variant.impressions
+                p = variant.success_rate
+                z = 1.96  # 95% confidence
+
+                if n > 0 and p > 0 and p < 1:
+                    denominator = 1 + (z ** 2) / n
+                    center = (p + (z ** 2) / (2 * n)) / denominator
+                    margin = z * math.sqrt((p * (1 - p) / n) + (z ** 2) / (4 * n ** 2)) / denominator
+
+                    lower = max(0.0, center - margin)
+                    upper = min(1.0, center + margin)
+                    confidence_interval = [lower, upper]
+
             metrics[variant.variant_id] = VariantMetrics(
                 impressions=variant.impressions,
                 successes=variant.successes,
                 success_rate=variant.success_rate,
                 avg_latency_ms=variant.avg_latency_ms,
-                # TODO: Calculate actual confidence interval
+                confidence_interval=confidence_interval,
                 is_significant=variant.impressions >= self.min_sample_size,
                 improvement_over_control=improvement,
             )

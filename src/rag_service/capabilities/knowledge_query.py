@@ -8,6 +8,7 @@ component and is only accessed via the Capability interface.
 HTTP endpoints use this capability - they NEVER access Milvus directly.
 """
 
+import time
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -19,6 +20,9 @@ from rag_service.capabilities.base import (
     CapabilityValidationResult,
 )
 from rag_service.core.exceptions import RetrievalError
+from rag_service.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class KnowledgeQueryInput(CapabilityInput):
@@ -115,34 +119,63 @@ class KnowledgeQueryCapability(Capability[KnowledgeQueryInput, KnowledgeQueryOut
         Raises:
             RetrievalError: If query execution fails.
         """
-        import time
-
         start_time = time.time()
 
-        # TODO: Implement actual Milvus query
-        # For now, return mock output
         try:
-            # Mock implementation
-            chunks = [
-                RetrievedChunk(
-                    id="mock_chunk_1",
-                    content=f"Mock result for query: {input_data.query[:50]}...",
-                    metadata={"source": "mock"},
-                    score=0.1,
-                ),
-            ]
+            # Use KnowledgeBase for actual query
+            if self._milvus_client is None:
+                # Import knowledge base if not provided
+                from rag_service.retrieval.knowledge_base import get_knowledge_base
+                self._milvus_client = await get_knowledge_base()
+
+            # Call async search
+            search_results = await self._milvus_client.asearch(
+                query=input_data.query,
+                top_k=input_data.top_k,
+            )
+
+            # Format results as RetrievedChunk objects
+            chunks = []
+            for result in search_results:
+                chunks.append(RetrievedChunk(
+                    id=result.get("chunk_id", ""),
+                    content=result.get("content", ""),
+                    metadata=result.get("metadata", {}),
+                    score=result.get("score", 0.0),
+                ))
 
             elapsed_ms = (time.time() - start_time) * 1000
 
+            logger.info(
+                "Knowledge query completed",
+                extra={
+                    "trace_id": input_data.trace_id,
+                    "collection": input_data.collection_name,
+                    "results_count": len(chunks),
+                    "latency_ms": elapsed_ms,
+                },
+            )
+
             return KnowledgeQueryOutput(
-                chunks=chunks[:input_data.top_k],
-                total_found=len(chunks),
+                chunks=chunks,
+                total_found=len(search_results),
                 query_time_ms=elapsed_ms,
                 trace_id=input_data.trace_id,
-                metadata={"collection": input_data.collection_name},
+                metadata={
+                    "collection": input_data.collection_name,
+                    "filters_applied": input_data.filters is not None,
+                },
             )
 
         except Exception as e:
+            logger.error(
+                "Knowledge query failed",
+                extra={
+                    "trace_id": input_data.trace_id,
+                    "collection": input_data.collection_name,
+                    "error": str(e),
+                },
+            )
             raise RetrievalError(
                 message=f"Query failed: {input_data.query}",
                 detail=str(e),
@@ -193,8 +226,18 @@ class KnowledgeQueryCapability(Capability[KnowledgeQueryInput, KnowledgeQueryOut
         # Check Milvus connectivity
         if self._milvus_client:
             try:
-                # TODO: Implement actual health check
-                health["milvus"] = "connected"
+                # Check if collection is available
+                collection = self._milvus_client._get_collection()
+
+                if collection is not None:
+                    health["milvus"] = "connected"
+                    health["collection"] = self._milvus_client.collection_name
+                    health["status"] = "healthy"
+                else:
+                    health["milvus"] = "connected_no_collection"
+                    health["collection"] = "none"
+                    health["status"] = "degraded"
+
             except Exception as e:
                 health["milvus"] = f"disconnected: {e}"
                 health["status"] = "unhealthy"

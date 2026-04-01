@@ -145,6 +145,83 @@ class LangfuseClientWrapper:
             # Return None instead of raising for graceful degradation
             return None
 
+    async def list_prompts(
+        self,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """List all prompt templates from Langfuse.
+
+        Args:
+            page: Optional page number (1-indexed)
+            limit: Optional limit per page
+
+        Returns:
+            List of prompt templates with basic information
+
+        Raises:
+            LangfuseConnectionError: If connection fails critically
+        """
+        if not self.is_connected():
+            logger.warning("Langfuse not connected, returning empty list")
+            return []
+
+        try:
+            # Langfuse SDK doesn't have a direct list method in Python
+            # We need to use the HTTP API directly
+            import httpx
+
+            # Build URL for prompts API
+            base_url = self._config.langfuse.host.rstrip("/")
+            url = f"{base_url}/api/prompt"
+
+            # Prepare request headers
+            headers = {
+                "Content-Type": "application/json",
+            }
+
+            # Make request
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    url,
+                    headers=headers,
+                    params={"page": page, "limit": limit} if page else {},
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+
+                data = response.json()
+
+                # Convert Langfuse response to list format
+                prompts = []
+                if "data" in data:
+                    for item in data["data"]:
+                        prompts.append({
+                            "id": item.get("id", ""),
+                            "name": item.get("name", ""),
+                            "description": item.get("description", ""),
+                            "prompt": item.get("prompt", ""),
+                            "version": item.get("version", 1),
+                            "config": item.get("config", {}),
+                            "metadata": item.get("metadata", {}),
+                            "tags": item.get("tags", []),
+                        })
+
+                logger.info(
+                    "Listed prompts from Langfuse",
+                    extra={"count": len(prompts)},
+                )
+
+                return prompts
+
+        except Exception as e:
+            logger.error(
+                "Failed to list prompts from Langfuse",
+                extra={"error": str(e)},
+                exc_info=True
+            )
+            return []
+
     def create_prompt(
         self,
         template_id: str,

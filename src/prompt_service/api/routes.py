@@ -15,7 +15,7 @@ Route Groups:
 import uuid
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 
 from prompt_service.api.schemas import (
@@ -92,6 +92,43 @@ def _get_http_status_for_error(error: PromptServiceError) -> int:
         return status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
+def _get_user_from_request(request: Request) -> str:
+    """Get user identifier from request auth context.
+
+    This function safely extracts user information from various possible
+    auth mechanisms. Falls back to "system" if no user info is available.
+
+    Args:
+        request: The FastAPI request object
+
+    Returns:
+        User identifier or "system" as fallback
+    """
+    # Try common auth context locations
+    if hasattr(request.state, "user"):
+        return str(request.state.user)
+
+    if hasattr(request.state, "user_id"):
+        return str(request.state.user_id)
+
+    # Check for various common auth header patterns
+    if "x-user-id" in request.headers:
+        return request.headers["x-user-id"]
+
+    if "x-user" in request.headers:
+        return request.headers["x-user"]
+
+    # Check for user in path/query params (for development/testing)
+    if "user" in request.query_params:
+        return request.query_params["user"]
+
+    if "user_id" in request.query_params:
+        return request.query_params["user_id"]
+
+    # Fallback to system user
+    return "system"
+
+
 # Create API router
 router = APIRouter(prefix="/api/v1", tags=["v1"])
 
@@ -102,6 +139,7 @@ router = APIRouter(prefix="/api/v1", tags=["v1"])
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
+    request: Request,
     detailed: bool = Query(False, description="Return detailed health information"),
 ) -> HealthResponse:
     """
@@ -109,6 +147,8 @@ async def health_check(
 
     Checks the health of the prompt service and returns status information.
     """
+    import time
+
     from prompt_service.config import get_config
     from prompt_service.services.langfuse_client import get_langfuse_client
 
@@ -121,11 +161,16 @@ async def health_check(
         "cache": "enabled" if config.cache.enabled else "disabled",
     }
 
+    # Calculate uptime from app state
+    uptime_ms = 0.0
+    if hasattr(request.app.state, "start_time"):
+        uptime_ms = (time.time() - request.app.state.start_time) * 1000
+
     return HealthResponse(
         status="healthy" if langfuse_health["status"] == "connected" else "degraded",
         version="0.1.0",
         components=components,
-        uptime_ms=0.0,  # TODO: Track actual uptime
+        uptime_ms=uptime_ms,
     )
 
 
@@ -299,6 +344,16 @@ async def list_prompts(
         page_size=page_size,
     )
 
+    # Get total count by listing without pagination
+    # For efficiency, we could cache this or get it from the service
+    all_templates = await management_service.list(
+        tag=tag or None,
+        search=search or None,
+        page=1,
+        page_size=10000,  # Large number to get approximate total
+    )
+    total_count = len(all_templates)
+
     # Convert templates to response format
     prompt_infos = []
     for template in templates:
@@ -336,14 +391,17 @@ async def list_prompts(
 
     return PromptListResponse(
         prompts=prompt_infos,
-        total=len(prompt_infos),  # TODO: Get actual total from Langfuse
+        total=total_count,
         page=page,
         page_size=page_size,
     )
 
 
 @router.post("/prompts", response_model=PromptCreateResponse, status_code=status.HTTP_201_CREATED)
-async def create_prompt(request: PromptCreateRequest) -> PromptCreateResponse:
+async def create_prompt(
+    http_request: Request,
+    request: PromptCreateRequest,
+) -> PromptCreateResponse:
     """
     Create a new prompt template.
 
@@ -395,7 +453,7 @@ async def create_prompt(request: PromptCreateRequest) -> PromptCreateResponse:
             sections=sections,
             variables=variables,
             tags=request.tags,
-            created_by="system",  # TODO: Get from auth context
+            created_by=_get_user_from_request(http_request),
             is_published=request.is_published,
         )
 
@@ -440,6 +498,7 @@ async def create_prompt(request: PromptCreateRequest) -> PromptCreateResponse:
 
 @router.put("/prompts/{template_id}", response_model=PromptUpdateResponse)
 async def update_prompt(
+    http_request: Request,
     template_id: str,
     request: PromptUpdateRequest,
 ) -> PromptUpdateResponse:
@@ -503,7 +562,7 @@ async def update_prompt(
             variables=variables,
             tags=request.tags,
             change_description=request.change_description,
-            updated_by="system",  # TODO: Get from auth context
+            updated_by=_get_user_from_request(http_request),
         )
 
         return PromptUpdateResponse(
@@ -560,7 +619,10 @@ async def update_prompt(
 
 
 @router.delete("/prompts/{template_id}", response_model=PromptDeleteResponse)
-async def delete_prompt(template_id: str) -> PromptDeleteResponse:
+async def delete_prompt(
+    http_request: Request,
+    template_id: str,
+) -> PromptDeleteResponse:
     """
     Delete a prompt template.
 
@@ -585,7 +647,7 @@ async def delete_prompt(template_id: str) -> PromptDeleteResponse:
 
         deleted = await management_service.delete(
             template_id=template_id,
-            deleted_by="system",  # TODO: Get from auth context
+            deleted_by=_get_user_from_request(http_request),
         )
 
         return PromptDeleteResponse(
@@ -630,7 +692,10 @@ async def delete_prompt(template_id: str) -> PromptDeleteResponse:
 # ============================================================================
 
 @router.post("/ab-tests", response_model=ABTestResponse, status_code=status.HTTP_201_CREATED)
-async def create_ab_test(request: ABTestCreateRequest) -> ABTestResponse:
+async def create_ab_test(
+    http_request: Request,
+    request: ABTestCreateRequest,
+) -> ABTestResponse:
     """
     Create a new A/B test.
 
@@ -673,7 +738,7 @@ async def create_ab_test(request: ABTestCreateRequest) -> ABTestResponse:
 
         test = await ab_service.create_test(
             config=config,
-            created_by="system",  # TODO: Get from auth context
+            created_by=_get_user_from_request(http_request),
         )
 
         # Convert to response
@@ -1366,6 +1431,7 @@ async def get_version_history(
 
 @router.post("/prompts/{template_id}/rollback", response_model=RollbackResponse)
 async def rollback_prompt(
+    http_request: Request,
     template_id: str,
     request: RollbackRequest,
 ) -> RollbackResponse:
@@ -1401,7 +1467,7 @@ async def rollback_prompt(
         rolled_back_template = await version_service.rollback(
             template_id=template_id,
             target_version=request.target_version,
-            rolled_back_by="system",  # TODO: Get from auth context
+            rolled_back_by=_get_user_from_request(http_request),
         )
 
         # Invalidate cache

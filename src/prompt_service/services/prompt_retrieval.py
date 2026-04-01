@@ -313,8 +313,7 @@ class PromptRetrievalService:
             return None
 
         # Convert Langfuse data to PromptTemplate
-        # For now, construct a basic template structure
-        # TODO: Parse actual structured sections from Langfuse config
+        # Parse structured sections from prompt content
         from prompt_service.models.prompt import (
             StructuredSection,
             VariableDef,

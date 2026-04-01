@@ -95,35 +95,90 @@ class ModelDiscoveryCapability(Capability[ModelDiscoveryInput, ModelDiscoveryOut
         Returns:
             Available models and providers.
         """
-        # TODO: Implement actual LiteLLM model list
-        # For now, return mock output
-        models = [
-            ModelInfo(
-                id="gpt-3.5-turbo",
-                name="GPT-3.5 Turbo",
-                provider="openai",
-                context_length=4096,
-            ),
-            ModelInfo(
-                id="gpt-4",
-                name="GPT-4",
-                provider="openai",
-                context_length=8192,
-            ),
-        ]
+        from rag_service.core.logger import get_logger
 
-        # Filter by provider if specified
-        if input_data.provider:
-            models = [m for m in models if m.provider == input_data.provider]
+        logger = get_logger(__name__)
 
-        providers = list(set(m.provider for m in models))
+        try:
+            # Use LiteLLM Gateway for actual model discovery
+            if self._litellm_client is None:
+                from rag_service.inference.gateway import get_gateway
+                self._litellm_client = await get_gateway()
 
-        return ModelDiscoveryOutput(
-            models=models,
-            providers=providers,
-            trace_id=input_data.trace_id,
-            metadata={"detail_level": input_data.detail_level},
-        )
+            # Get available models from gateway
+            available_models = self._litellm_client.get_available_models()
+
+            models = []
+            for model_data in available_models:
+                model_id = model_data.get("model_id", "")
+                provider = model_data.get("provider", "unknown")
+
+                # Parse model name for display
+                display_name = model_id
+                if "gpt-3.5" in model_id:
+                    display_name = "GPT-3.5 Turbo"
+                elif "gpt-4" in model_id and "turbo" not in model_id:
+                    display_name = "GPT-4"
+                elif "gpt-4-turbo" in model_id:
+                    display_name = "GPT-4 Turbo"
+                elif "claude-3-opus" in model_id:
+                    display_name = "Claude 3 Opus"
+                elif "claude-3-sonnet" in model_id:
+                    display_name = "Claude 3 Sonnet"
+                elif "claude-3-haiku" in model_id:
+                    display_name = "Claude 3 Haiku"
+                elif "llama3" in model_id:
+                    display_name = "Llama 3"
+
+                # Estimate context length (simplified)
+                context_length = 4096
+                if "gpt-4" in model_id and "turbo" not in model_id:
+                    context_length = 8192
+                elif "gpt-4-turbo" in model_id:
+                    context_length = 128000
+                elif "claude-3" in model_id:
+                    context_length = 200000
+
+                models.append(ModelInfo(
+                    id=model_id,
+                    name=display_name,
+                    provider=provider,
+                    context_length=context_length,
+                ))
+
+            # Filter by provider if specified
+            if input_data.provider:
+                models = [m for m in models if m.provider == input_data.provider]
+
+            providers = list(set(m.provider for m in models))
+
+            logger.info(
+                "Model discovery completed",
+                extra={
+                    "models_count": len(models),
+                    "providers": providers,
+                },
+            )
+
+            return ModelDiscoveryOutput(
+                models=models,
+                providers=providers,
+                trace_id=input_data.trace_id,
+                metadata={"detail_level": input_data.detail_level},
+            )
+
+        except Exception as e:
+            logger.error(
+                "Model discovery failed",
+                extra={"error": str(e)},
+            )
+            # Return empty result on error
+            return ModelDiscoveryOutput(
+                models=[],
+                providers=[],
+                trace_id=input_data.trace_id,
+                metadata={"error": str(e)},
+            )
 
     def validate_input(self, input_data: ModelDiscoveryInput) -> CapabilityValidationResult:
         """
@@ -159,12 +214,20 @@ class ModelDiscoveryCapability(Capability[ModelDiscoveryInput, ModelDiscoveryOut
         # Check LiteLLM connectivity
         if self._litellm_client:
             try:
-                # TODO: Implement actual health check
+                # Check available providers
+                available_providers = self._litellm_client.get_available_providers()
+                available_models = self._litellm_client.get_available_models()
+
                 health["litellm"] = "connected"
+                health["available_providers"] = available_providers
+                health["available_models"] = len(available_models)
+                health["status"] = "healthy" if available_providers else "degraded"
+
             except Exception as e:
                 health["litellm"] = f"disconnected: {e}"
-                health["status"] = "degraded"
+                health["status"] = "unhealthy"
         else:
             health["litellm"] = "not_configured"
+            health["status"] = "degraded"
 
         return health

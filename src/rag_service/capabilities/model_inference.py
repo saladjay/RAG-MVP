@@ -6,6 +6,7 @@ via the LiteLLM gateway. HTTP endpoints use this capability - they
 NEVER access LiteLLM directly.
 """
 
+import time
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -17,6 +18,9 @@ from rag_service.capabilities.base import (
     CapabilityValidationResult,
 )
 from rag_service.core.exceptions import GenerationError
+from rag_service.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ModelInferenceInput(CapabilityInput):
@@ -102,33 +106,64 @@ class ModelInferenceCapability(Capability[ModelInferenceInput, ModelInferenceOut
         Raises:
             GenerationError: If inference fails.
         """
-        import time
-
         start_time = time.time()
         model = input_data.model or self._default_model
 
-        # TODO: Implement actual LiteLLM call
         try:
-            # Mock implementation
-            generated_text = f"Mock response for prompt: {input_data.prompt[:50]}..."
-            usage = {
-                "prompt_tokens": len(input_data.prompt.split()),
-                "completion_tokens": 20,
-                "total_tokens": len(input_data.prompt.split()) + 20,
-            }
+            # Use LiteLLM Gateway for actual inference
+            if self._litellm_client is None:
+                # Import gateway if not provided
+                from rag_service.inference.gateway import get_gateway
+                self._litellm_client = await get_gateway()
+
+            # Call async completion
+            result = await self._litellm_client.acomplete(
+                prompt=input_data.prompt,
+                model_hint=model,
+                max_tokens=input_data.max_tokens,
+                temperature=input_data.temperature,
+            )
 
             elapsed_ms = (time.time() - start_time) * 1000
 
+            logger.info(
+                "Model inference completed",
+                extra={
+                    "trace_id": input_data.trace_id,
+                    "model": result.model,
+                    "provider": result.provider,
+                    "input_tokens": result.input_tokens,
+                    "output_tokens": result.output_tokens,
+                    "latency_ms": elapsed_ms,
+                },
+            )
+
             return ModelInferenceOutput(
-                text=generated_text,
-                model=model,
-                usage=usage,
+                text=result.text,
+                model=result.model,
+                usage={
+                    "prompt_tokens": result.input_tokens,
+                    "completion_tokens": result.output_tokens,
+                    "total_tokens": result.total_tokens,
+                    "cost": result.cost,
+                },
                 inference_time_ms=elapsed_ms,
                 trace_id=input_data.trace_id,
-                metadata={"temperature": input_data.temperature},
+                metadata={
+                    "temperature": input_data.temperature,
+                    "provider": result.provider,
+                },
             )
 
         except Exception as e:
+            logger.error(
+                "Model inference failed",
+                extra={
+                    "trace_id": input_data.trace_id,
+                    "model": model,
+                    "error": str(e),
+                },
+            )
             raise GenerationError(
                 message=f"Inference failed with model '{model}'",
                 detail=str(e),
@@ -180,8 +215,15 @@ class ModelInferenceCapability(Capability[ModelInferenceInput, ModelInferenceOut
         # Check LiteLLM connectivity
         if self._litellm_client:
             try:
-                # TODO: Implement actual health check
+                # Check if gateway has available models
+                available_models = self._litellm_client.get_available_models()
+                available_providers = self._litellm_client.get_available_providers()
+
                 health["litellm"] = "connected"
+                health["available_models"] = len(available_models)
+                health["available_providers"] = available_providers
+                health["status"] = "healthy" if available_providers else "degraded"
+
             except Exception as e:
                 health["litellm"] = f"disconnected: {e}"
                 health["status"] = "unhealthy"

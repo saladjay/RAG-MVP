@@ -318,19 +318,49 @@ class PromptManagementService:
         Returns:
             List of prompt templates
         """
-        # TODO: Implement actual listing from Langfuse
-        # For now, return empty list
+        # Get all prompts from Langfuse
+        prompts_data = await self._langfuse_client.list_prompts()
+
+        if not prompts_data:
+            return []
+
+        # Convert to PromptTemplate objects
+        templates = []
+        for prompt_data in prompts_data:
+            # Apply filters
+            if tag and tag not in prompt_data.get("tags", []):
+                continue
+            if search:
+                name = prompt_data.get("name", "").lower()
+                description = prompt_data.get("description", "").lower()
+                if search.lower() not in name and search.lower() not in description:
+                    continue
+
+            templates.append(PromptTemplate(
+                template_id=prompt_data.get("id", ""),
+                name=prompt_data.get("name", ""),
+                description=prompt_data.get("description", ""),
+                template=prompt_data.get("prompt", ""),
+                variables=prompt_data.get("variables", {}),
+                tags=prompt_data.get("tags", []),
+                version=prompt_data.get("version", 1),
+                metadata={"langfuse_data": prompt_data},
+            ))
+
+        # Apply pagination
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_templates = templates[start_idx:end_idx]
+
         logger.info(
-            "Listing prompt templates",
+            "Listed prompt templates",
             extra={
-                "tag": tag,
-                "search": search,
-                "page": page,
-                "page_size": page_size,
+                "total_count": len(templates),
+                "returned_count": len(paginated_templates),
             }
         )
 
-        return []
+        return paginated_templates
 
     async def get(
         self,
