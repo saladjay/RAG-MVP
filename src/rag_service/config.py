@@ -13,7 +13,7 @@ Configuration Sources (in priority order):
 
 import os
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, Dict
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -209,17 +209,44 @@ class CORSConfig(BaseSettings):
 
 
 class ExternalKBConfig(BaseSettings):
-    """External HTTP Knowledge Base configuration."""
+    """External HTTP Knowledge Base configuration.
+
+    Supports flexible authentication through HTTP headers.
+    Common patterns:
+    - Bearer token: {"Authorization": "Bearer your-token"}
+    - API key: {"x-api-key": "your-api-key"}
+    - Custom token: {"X-Token": "your-token"}
+    """
 
     base_url: str = Field(default="", description="External KB base URL")
     endpoint: str = Field(
         default="/cloudoa-ai/ai/file-knowledge/queryKnowledge",
         description="External KB API endpoint"
     )
-    token: str = Field(default="", description="X-Token header for authentication")
     timeout: int = Field(default=30, description="Request timeout in seconds")
     max_retries: int = Field(default=3, description="Maximum retry attempts")
     enabled: bool = Field(default=True, description="Enable external KB integration")
+
+    # Flexible authentication
+    headers: Dict[str, str] = Field(
+        default_factory=dict,
+        description="HTTP headers for authentication. "
+                    "Examples: "
+                    "- Bearer token: {'Authorization': 'Bearer token'} "
+                    "- API key: {'x-api-key': 'api-key'} "
+                    "- Custom: {'X-Custom-Auth': 'value'}"
+    )
+    auth_token: str = Field(
+        default="",
+        description="Auth token for 'Authorization: Bearer <token>' (shortcut for common Bearer pattern)"
+    )
+
+    # Deprecated: Use 'headers' instead
+    token: str = Field(
+        default="",
+        deprecated="Use 'headers'={'xtoken': 'xxx'} or 'auth_token' instead",
+        description="Deprecated: Simple token for X-Token header"
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="EXTERNAL_KB_",
