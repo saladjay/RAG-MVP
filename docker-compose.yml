@@ -1,0 +1,112 @@
+# Docker Compose for RAG Service MVP Local Development
+# This file provides local Milvus and optional services for development
+
+version: "3.8"
+
+services:
+  # Milvus etcd (required for Milvus)
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379
+    networks:
+      - rag_network
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Milvus MinIO (required for Milvus storage)
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    networks:
+      - rag_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Milvus Standalone
+  milvus:
+    image: milvusdb/milvus:v2.3.3
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    networks:
+      - rag_network
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+
+  # Optional: Langfuse self-hosted for local development
+  # Uncomment to use local Langfuse instead of cloud
+  # langfuse:
+  #   image: langfuse/langfuse:latest
+  #   environment:
+  #     DATABASE_URL: postgresql://postgres:postgres@langfuse-db:5432/langfuse
+  #     NEXTAUTH_SECRET:local-secret
+  #     SALT_KEY:local-salt
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - rag_network
+  #   depends_on:
+  #     - langfuse-db
+
+  # Optional: PostgreSQL for Langfuse
+  # langfuse-db:
+  #   image: postgres:15
+  #   environment:
+  #     POSTGRES_DB: langfuse
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - rag_network
+
+  # Optional: Redis for caching
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   networks:
+  #     - rag_network
+
+networks:
+  rag_network:
+    driver: bridge
+
+volumes:
+  etcd_data:
+  minio_data:
+  milvus_data:
+  # postgres_data:

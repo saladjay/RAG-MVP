@@ -1,0 +1,21 @@
+[
+  {
+    "id": "test_basic_query",
+    "question": "What is the RAG Service?",
+    "expected_answer": "RAG Service is a retrieval-augmented generation system that combines vector search with large language model generation.",
+    "source_docs": ["doc_rag_intro"],
+    "tags": ["basic", "smoke"]
+  },
+  {
+    "id": "test_empty_knowledge_base",
+    "question": "What happens when knowledge base is empty?",
+    "tags": ["edge-case"]
+  },
+  {
+    "id": "test_vector_search",
+    "question": "How does vector search work in the RAG system?",
+    "expected_answer": "Vector search converts queries to embeddings and finds similar documents using cosine similarity.",
+    "source_docs": ["doc_vector_search", "doc_embeddings"],
+    "tags": ["advanced", "vector"]
+  }
+]

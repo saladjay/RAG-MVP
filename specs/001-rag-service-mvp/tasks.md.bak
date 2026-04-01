@@ -1,0 +1,385 @@
+# Tasks: RAG Service MVP - AI Component Validation Platform
+
+**Input**: Design documents from `/specs/001-rag-service-mvp/`
+**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/
+**User Requirement**: Determine stable component versions and manage Python packages with uv
+
+**Tests**: Tests are MANDATORY per constitution (Principle III). Use real implementations, minimize mocks. Each node/implementation must have complete unit tests.
+
+**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
+
+**Constitution Compliance**:
+- All implementation tasks must include documentation headers (Principle I)
+- Testing tasks must use real implementations (Principle III)
+- Python tasks must use `uv` environment (Principle IV)
+
+---
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: Can run in parallel (different files, no dependencies)
+- **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3, US4)
+- Include exact file paths in descriptions
+
+---
+
+## Phase 1: Setup (Shared Infrastructure)
+
+**Purpose**: Project initialization, dependency resolution, and basic structure
+
+- [ ] T001 Determine stable component versions and create pyproject.toml in project root
+- [ ] T002 Initialize uv virtual environment and install dependencies using uv
+- [ ] T003 [P] Create src/rag_service/ package structure per implementation plan
+- [ ] T004 [P] Create tests/ directory structure with unit/, integration/, contract/ subdirectories
+- [ ] T005 [P] Configure pytest with pytest.ini for test discovery and async support
+- [ ] T006 [P] Create tests/conftest.py with shared fixtures for server startup and real service instances
+- [ ] T007 [P] Setup .env.example file with all required environment variables
+- [ ] T008 [P] Create docker-compose.yml for Milvus and optional local services
+- [ ] T009 [P] Create .gitignore for Python, uv, and IDE files
+- [ ] T010 [P] Create README.md with quick reference to quickstart.md
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
+
+**⚠️ CRITICAL**: No user story work can begin until this phase is complete
+
+### Configuration & Core
+
+- [ ] T011 Create src/rag_service/config.py with environment variable loading and validation
+- [ ] T012 [P] Create src/rag_service/core/exceptions.py with custom exception classes
+
+### Logging Framework (Global Foundation)
+
+- [ ] T012a [P] Create src/rag_service/core/logger.py with structured logging configuration using Python logging
+- [ ] T012b [P] Implement log level configuration via environment variable (LOG_LEVEL=DEBUG/INFO/WARNING/ERROR)
+- [ ] T012c [P] Create custom log formatters with trace_id injection for request correlation
+- [ ] T012d [P] Implement log handlers: console handler with colors, file handler with rotation (optional)
+- [ ] T012e [P] Create structured log context builder with request_id, trace_id, user_id, session_id fields
+- [ ] T012f [P] Implement lazy loading of logger instances (get_logger pattern) for all modules
+- [ ] T012g [P] Create src/rag_service/core/logging_config.py with logging setup for FastAPI/uvicorn integration
+- [ ] T012h [P] Add request-scoped logging middleware for trace_id injection into all log records
+- [ ] T012i [P] Implement non-blocking logging to prevent log failures from blocking requests
+- [ ] T012j [P] Create unit test for logging framework in tests/unit/test_logger.py
+
+### Observability Foundation (All 3 Layers)
+
+- [ ] T023 [P] Create src/rag_service/observability/trace_manager.py with unified trace_id generation and propagation
+- [ ] T024 [P] Create src/rag_service/observability/langfuse_client.py (Prompt Layer) with async trace capture
+- [ ] T025 [P] Create src/rag_service/observability/litellm_observer.py (LLM Layer) with cost/performance/routing metrics
+- [ ] T026 [P] Create src/rag_service/observability/phidata_observer.py (Agent Layer) with execution/reasoning metrics
+- [ ] T027 Implement unified trace_id propagation across Phidata → CrewAI → LiteLLM layers
+- [ ] T028 Implement non-blocking trace flush to prevent observability failures from blocking requests
+
+### API Foundation
+
+- [ ] T029 Create src/rag_service/main.py with FastAPI app initialization and lifecycle management
+- [ ] T030 [P] Create src/rag_service/api/schemas.py with Pydantic models for request/response
+- [ ] T031 [P] Create src/rag_service/api/routes.py with /health and /models endpoints
+
+**Checkpoint**: Foundation ready - user story implementation can now begin in parallel
+
+---
+
+## Phase 3: User Story 1 - Knowledge Base Query (Priority: P1) 🎯 MVP
+
+**Goal**: Query knowledge base via HTTP POST and receive AI-generated answers with retrieved context
+
+**Independent Test**: Send POST /ai/agent with question → receive response with answer + retrieved chunks + trace_id
+
+### Tests for User Story 1
+
+> **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
+
+- [ ] T032 [P] [US1] Write contract test for /ai/agent endpoint in tests/contract/test_api_contract.py
+- [ ] T033 [P] [US1] Write integration test for knowledge base query flow in tests/integration/test_e2e_flow.py
+- [ ] T034 [P] [US1] Write unit test for knowledge base retrieval in tests/unit/test_knowledge_base.py
+- [ ] T035 [P] [US1] Write unit test for agent orchestration in tests/unit/test_agent.py
+- [ ] T036 [P] [US1] Write unit test for unified trace propagation in tests/unit/test_unified_trace.py
+
+### Implementation for User Story 1
+
+- [ ] T037 [P] [US1] Create src/rag_service/retrieval/embeddings.py with OpenAI embedding service
+- [ ] T038 [P] [US1] Create src/rag_service/retrieval/knowledge_base.py with Milvus client and search methods
+- [ ] T039 [US1] Implement knowledge base connection pooling in Milvus client
+- [ ] T040 [P] [US1] Create src/rag_service/inference/gateway.py with LiteLLM client integration
+- [ ] T041 [P] [US1] Create src/rag_service/inference/models.py with model provider configuration classes
+- [ ] T042 [US1] Implement /ai/agent POST endpoint in src/rag_service/api/routes.py (depends on T027-T031)
+- [ ] T043 [US1] Create src/rag_service/core/agent.py with Phidata agent orchestration and tool definitions
+- [ ] T044 [US1] Implement retrieval tool for Phidata agent (depends on T028)
+- [ ] T045 [US1] Implement LLM inference tool for Phidata agent (depends on T030)
+- [ ] T046 [US1] Wire unified trace_id through agent execution flow (Phidata → LiteLLM)
+- [ ] T047 [US1] Implement error handling for no-retrieval-results scenario
+- [ ] T048 [US1] Add logging for knowledge base query operations
+
+**Checkpoint**: User Story 1 complete - can query knowledge base and get AI answers with trace correlation
+
+---
+
+## Phase 4: User Story 2 - Multi-Model Inference (Priority: P2)
+
+**Goal**: Validate multiple AI models through unified LiteLLM gateway without changing client code
+
+**Independent Test**: Configure Ollama/OpenAI/Claude → make requests → verify routing to correct provider
+
+### Tests for User Story 2
+
+- [ ] T049 [P] [US2] Write contract test for LiteLLM gateway routing in tests/contract/test_litellm_contract.py
+- [ ] T050 [P] [US2] Write integration test for multi-provider model selection in tests/integration/test_e2e_flow.py
+- [ ] T051 [P] [US2] Write unit test for gateway provider selection in tests/unit/test_gateway.py
+
+### Implementation for User Story 2
+
+- [ ] T052 [P] [US2] Create litellm_config.yaml for multi-provider configuration in project root
+- [ ] T053 [US2] Add vLLM provider configuration to litellm_config.yaml
+- [ ] T054 [US2] Add SGLang provider configuration to litellm_config.yaml
+- [ ] T055 [US2] Implement model provider switching logic in src/rag_service/inference/gateway.py
+- [ ] T056 [US2] Implement fallback chain configuration for provider failures
+- [ ] T057 [US2] Add model hint parameter support to /ai/agent endpoint
+- [ ] T058 [US2] Update GET /models endpoint to return available providers with availability status
+- [ ] T059 [US2] Integrate provider selection with unified trace_id capture
+
+**Checkpoint**: User Stories 1 AND 2 both work - can query with multiple models
+
+---
+
+## Phase 5: User Story 3 - Observability and Tracing (Priority: P3)
+
+**Goal**: Complete three-layer observability with cross-layer trace correlation for optimization
+
+**Independent Test**: Make query → retrieve trace by ID → verify all layer metrics (Phidata, LiteLLM, Langfuse)
+
+### Tests for User Story 3
+
+- [ ] T050 [P] [US3] Write contract test for Langfuse integration in tests/contract/test_langfuse_contract.py
+- [ ] T051 [P] [US3] Write integration test for cross-layer trace correlation in tests/integration/test_trace_correlation.py
+- [ ] T052 [P] [US3] Write unit test for Phidata observer in tests/unit/test_phidata_observer.py
+- [ ] T053 [P] [US3] Write unit test for LiteLLM observer in tests/unit/test_litellm_observer.py
+- [ ] T054 [P] [US3] Write unit test for Langfuse client in tests/unit/test_observability.py
+
+### Implementation for User Story 3
+
+- [ ] T055 [P] [US3] Implement trace retrieval endpoint GET /traces/{trace_id} in src/rag_service/api/routes.py
+- [ ] T056 [P] [US3] Add span creation for each processing stage in src/rag_service/observability/langfuse_client.py
+- [ ] T057 [US3] Implement cost aggregation (per-request, per-user, per-scenario) in src/rag_service/observability/litellm_observer.py
+- [ ] T058 [P] [US3] Implement routing decision capture in src/rag_service/observability/litellm_observer.py
+- [ ] T059 [P] [US3] Implement tool call tracking in src/rag_service/observability/phidata_observer.py
+- [ ] T060 [P] [US3] Implement reasoning path capture in src/rag_service/observability/phidata_observer.py
+- [ ] T061 [US3] Implement prompt version tracking in src/rag_service/observability/langfuse_client.py
+- [ ] T062 [US3] Implement retrieved docs injection tracking in src/rag_service/observability/langfuse_client.py
+- [ ] T063 [US3] Add GET /observability/metrics endpoint with aggregated cross-layer metrics
+- [ ] T064 [US3] Implement background trace flush with error handling
+
+**Checkpoint**: User Stories 1, 2, AND 3 all work - complete observability with optimization loop
+
+---
+
+## Phase 6: User Story 4 - Knowledge Base Management (Priority: P4)
+
+**Goal**: Add, update, remove documents from knowledge base
+
+**Independent Test**: Upload document → verify indexed → query returns new content
+
+### Tests for User Story 4
+
+- [ ] T065 [P] [US4] Write contract test for Milvus document operations in tests/contract/test_milvus_contract.py
+- [ ] T066 [P] [US4] Write integration test for document lifecycle in tests/integration/test_e2e_flow.py
+- [ ] T067 [P] [US4] Write unit test for document indexing in tests/unit/test_knowledge_base.py
+
+### Implementation for User Story 4
+
+- [ ] T068 [P] [US4] Implement document upload endpoint POST /documents in src/rag_service/api/routes.py
+- [ ] T069 [P] [US4] Implement document deletion endpoint DELETE /documents/{doc_id} in src/rag_service/api/routes.py
+- [ ] T070 [US4] Implement document update endpoint PUT /documents/{doc_id} in src/rag_service/api/routes.py
+- [ ] T071 [US4] Implement document indexing with embedding generation in src/rag_service/retrieval/knowledge_base.py
+- [ ] T072 [US4] Implement document re-indexing on update
+- [ ] T073 [US4] Add document management operations to trace recording
+
+**Checkpoint**: All 4 user stories complete - full RAG service with observability and document management
+
+---
+
+## Phase 7: Polish & Cross-Cutting Concerns
+
+**Purpose**: Improvements that affect multiple user stories
+
+- [ ] T074 [P] Add comprehensive documentation headers to all source files (Principle I)
+- [ ] T075 [P] Run pytest with --cov to verify 80%+ test coverage (Principle III)
+- [ ] T076 [P] Add type hints to all function signatures in src/rag_service/
+- [ ] T077 Implement request timeout handling at each processing stage
+- [ ] T078 [P] Create run_tests.sh script for server startup and test execution
+- [ ] T079 [P] Performance test: verify <10s response time with 10 concurrent requests
+- [ ] T080 [P] Security review: validate all inputs and sanitize error messages
+- [ ] T081 Run quickstart.md validation to ensure setup works in 15 minutes
+- [ ] T082 Generate and verify API documentation matches contracts/api-contract.md
+
+---
+
+## Dependencies & Execution Order
+
+### Phase Dependencies
+
+- **Setup (Phase 1)**: No dependencies - can start immediately
+- **Foundational (Phase 2)**: Depends on Setup completion - BLOCKS all user stories
+- **User Stories (Phase 3-6)**: All depend on Foundational phase completion
+  - User stories can then proceed in parallel (if staffed)
+  - Or sequentially in priority order (P1 → P2 → P3 → P4)
+- **Polish (Phase 7)**: Depends on all desired user stories being complete
+
+### User Story Dependencies
+
+- **User Story 1 (P1)**: Can start after Foundational (Phase 2) - No dependencies on other stories
+- **User Story 2 (P2)**: Can start after Foundational (Phase 2) - Extends US1 with multi-model routing
+- **User Story 3 (P3)**: Can start after Foundational (Phase 2) - Enhances observability across all stories
+- **User Story 4 (P4)**: Can start after Foundational (Phase 2) - Adds document management, independent of US1-US3
+
+### Within Each User Story
+
+- Tests MUST be written and FAIL before implementation
+- Models/Components before services
+- Services before endpoints
+- Core implementation before integration
+- Story complete before moving to next priority
+
+### Parallel Opportunities
+
+- All Setup tasks marked [P] can run in parallel
+- All Foundational tasks marked [P] can run in parallel (within Phase 2)
+- Once Foundational phase completes, all user stories can start in parallel (if team capacity allows)
+- All tests for a user story marked [P] can run in parallel
+- Models/components within a story marked [P] can run in parallel
+- Different user stories can be worked on in parallel by different team members
+
+---
+
+## Parallel Example: User Story 1
+
+```bash
+# Launch all tests for User Story 1 together:
+Task T022: Contract test for /ai/agent endpoint
+Task T023: Integration test for knowledge base query flow
+Task T024: Unit test for knowledge base retrieval
+Task T025: Unit test for agent orchestration
+Task T026: Unit test for unified trace propagation
+
+# Launch all retrieval/inference components together:
+Task T027: Embedding service
+Task T028: Knowledge base client
+Task T030: LiteLLM gateway
+Task T031: Model provider configurations
+```
+
+---
+
+## Implementation Strategy
+
+### MVP First (User Story 1 Only)
+
+1. Complete Phase 1: Setup
+2. Complete Phase 2: Foundational (CRITICAL - blocks all stories)
+3. Complete Phase 3: User Story 1
+4. **STOP and VALIDATE**: Test User Story 1 independently
+5. Deploy/demo if ready
+
+### Incremental Delivery
+
+1. Complete Setup + Foundational → Foundation ready
+2. Add User Story 1 → Test independently → Deploy/Demo (MVP!)
+3. Add User Story 2 → Test independently → Deploy/Demo
+4. Add User Story 3 → Test independently → Deploy/Demo
+5. Add User Story 4 → Test independently → Deploy/Demo
+6. Each story adds value without breaking previous stories
+
+### Parallel Team Strategy
+
+With multiple developers:
+
+1. Team completes Setup + Foundational together
+2. Once Foundational is done:
+   - Developer A: User Story 1 (Knowledge Base Query)
+   - Developer B: User Story 2 (Multi-Model Inference)
+   - Developer C: User Story 3 (Observability & Tracing)
+3. Stories complete and integrate independently
+4. Developer D: User Story 4 (Knowledge Base Management) - can start anytime after Foundational
+
+---
+
+## Component Version Resolution (User Requirement)
+
+### Stable Component Versions to Determine
+
+The following component versions must be validated for compatibility:
+
+| Component | Purpose | Stable Version Strategy |
+|-----------|---------|--------------------------|
+| Python | Runtime | 3.11.x (latest 3.11) |
+| FastAPI | Web framework | Latest stable 0.110+ |
+| Phidata | Agent orchestration | Latest compatible with FastAPI |
+| LiteLLM | Model gateway | Latest 1.0+ with provider support |
+| Langfuse | Observability (Prompt Layer) | Latest 2.x Python SDK |
+| pymilvus | Knowledge base | 2.3.x with connection pooling |
+| pytest | Testing | Latest with pytest-asyncio support |
+| uvicorn | ASGI server | Latest compatible with FastAPI |
+
+### Setup Tasks (T001-T002) Detail
+
+**T001: Determine stable component versions**
+- Research compatibility matrix between FastAPI, Phidata, LiteLLM, Langfuse
+- Test Python 3.11 compatibility with all components
+- Pin specific versions in pyproject.toml after validation
+- Document any known compatibility issues in research.md
+
+**T002: Initialize uv environment**
+- Create uv venv: `uv venv`
+- Activate and install: `source .venv/bin/activate && uv pip install -e .`
+- Verify all imports work: `python -c "import fastapi, phidata, litellm, langfuse, pymilvus"`
+- Lock versions: `uv lock` to generate uv.lock file
+
+---
+
+## Notes
+
+- [P] tasks = different files, no dependencies
+- [Story] label maps task to specific user story for traceability
+- Each user story should be independently completable and testable
+- Verify tests fail before implementing
+- Commit after each task or logical group
+- Stop at any checkpoint to validate story independently
+- Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
+
+---
+
+## Task Summary
+
+- **Total Tasks**: 82
+- **Tasks per User Story**:
+  - US1 (Knowledge Base Query): 17 tasks (T022-T038)
+  - US2 (Multi-Model Inference): 11 tasks (T039-T049)
+  - US3 (Observability): 15 tasks (T050-T064)
+  - US4 (KB Management): 9 tasks (T065-T073)
+- **Setup Tasks**: 10 tasks
+- **Foundational Tasks**: 8 tasks
+- **Polish Tasks**: 9 tasks
+
+### Parallel Opportunities Identified
+
+- **Setup Phase**: 8/10 tasks can run in parallel
+- **Foundational Phase**: 5/8 observability/API tasks can run in parallel
+- **User Story 1**: 5/6 tests and 4/6 components can run in parallel
+- **User Story 2**: 3/3 tests can run in parallel
+- **User Story 3**: 5/5 tests can run in parallel
+- **User Story 4**: 3/3 tests can run in parallel
+
+### MVP Scope Recommendation
+
+**MVP = Phase 1 + Phase 2 + Phase 3 (User Story 1)**
+
+This delivers:
+- Working RAG service with knowledge base queries
+- AI-generated answers with retrieved context
+- Basic observability with unified trace_id
+- Complete test coverage for core functionality
+
+**Estimated Effort**: ~40 tasks (Setup + Foundational + US1)

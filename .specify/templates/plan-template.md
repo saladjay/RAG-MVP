@@ -31,7 +31,22 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+### Documentation Standards (Principle I & II)
+- [ ] All files will include header with content and API brief description
+- [ ] Documentation headers will be updated immediately on content changes
+- [ ] Call flow diagrams will be generated at `.specify/specs/xxxx/research.md`
+- [ ] Architecture documentation will reference all APIs (document location → function name)
+
+### Testing Standards (Principle III & IV)
+- [ ] Tests will use real implementations (minimal mocks)
+- [ ] Server tests will include server startup scripts
+- [ ] Python execution will use `uv`-managed virtual environment
+- [ ] Blocking points for real test implementation will be documented
+
+### Component Governance (Principle V)
+- [ ] New base components have not been created without approval
+- [ ] Existing base components are documented
+- [ ] Package management uses `uv` for Python dependencies
 
 ## Project Structure
 

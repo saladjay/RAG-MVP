@@ -1,0 +1,188 @@
+# LiteLLM Configuration for RAG Service
+#
+# This configuration enables multi-model inference through the LiteLLM gateway.
+# It supports multiple providers: OpenAI, Anthropic, Ollama, vLLM, SGLang
+#
+# Environment variables:
+# - OPENAI_API_KEY: OpenAI API key for GPT models
+# - ANTHROPIC_API_KEY: Anthropic API key for Claude models
+# - LITELLM_API_KEY: Optional master API key
+#
+# Usage:
+# The gateway.py module loads this configuration to enable model routing.
+# Use model_hint parameter in /ai/agent request to specify which model to use.
+
+model_list:
+  # =====================================================================
+  # OpenAI Models
+  # =====================================================================
+  - model_name: gpt-4
+    litellm_params:
+      model: gpt-4
+      api_key: ${OPENAI_API_KEY}
+    tags: ["openai", "gpt4", "premium"]
+    metadata:
+      provider: openai
+      context_length: 8192
+      supports_function_calling: true
+
+  - model_name: gpt-4-turbo
+    litellm_params:
+      model: gpt-4-turbo
+      api_key: ${OPENAI_API_KEY}
+    tags: ["openai", "gpt4-turbo", "turbo"]
+    metadata:
+      provider: openai
+      context_length: 128000
+      supports_function_calling: true
+
+  - model_name: gpt-3.5-turbo
+    litellm_params:
+      model: gpt-3.5-turbo
+      api_key: ${OPENAI_API_KEY}
+    tags: ["openai", "gpt35", "fast", "cost-effective"]
+    metadata:
+      provider: openai
+      context_length: 16385
+      supports_function_calling: true
+      default: true
+
+  # =====================================================================
+  # Anthropic Models
+  # =====================================================================
+  - model_name: claude-3-opus
+    litellm_params:
+      model: claude-3-opus-20040229
+      api_key: ${ANTHROPIC_API_KEY}
+    tags: ["anthropic", "claude", "opus", "premium"]
+    metadata:
+      provider: anthropic
+      context_length: 200000
+      supports_vision: true
+
+  - model_name: claude-3-sonnet
+    litellm_params:
+      model: claude-3-sonnet-20240229
+      api_key: ${ANTHROPIC_API_KEY}
+    tags: ["anthropic", "claude", "sonnet", "balanced"]
+    metadata:
+      provider: anthropic
+      context_length: 200000
+      supports_vision: true
+
+  - model_name: claude-3-haiku
+    litellm_params:
+      model: claude-3-haiku-20240307
+      api_key: ${ANTHROPIC_API_KEY}
+    tags: ["anthropic", "claude", "haiku", "fast"]
+    metadata:
+      provider: anthropic
+      context_length: 200000
+
+  # =====================================================================
+  # Ollama Models (Local)
+  # =====================================================================
+  - model_name: ollama/llama3
+    litellm_params:
+      model: ollama/llama3
+      api_base: ${OLLAMA_BASE_URL:http://localhost:11434}
+    tags: ["ollama", "local", "llama", "open-source"]
+    metadata:
+      provider: ollama
+      context_length: 8192
+
+  - model_name: ollama/mistral
+    litellm_params:
+      model: ollama/mistral
+      api_base: ${OLLAMA_BASE_URL:http://localhost:11434}
+    tags: ["ollama", "local", "mistral", "open-source"]
+    metadata:
+      provider: ollama
+      context_length: 8192
+
+  - model_name: ollama/phi3
+    litellm_params:
+      model: ollama/phi3
+      api_base: ${OLLAMA_BASE_URL:http://localhost:11434}
+    tags: ["ollama", "local", "phi3", "lightweight"]
+    metadata:
+      provider: ollama
+      context_length: 4096
+
+  # =====================================================================
+  # vLLM Models (OpenAI-Compatible)
+  # =====================================================================
+  - model_name: vllm/llama3-70b
+    litellm_params:
+      model: vllm/llama3-70b
+      api_base: ${VLLM_BASE_URL:http://localhost:8000}
+      api_key: ${VLLM_API_KEY:dummy-key}
+    tags: ["vllm", "local", "llama", "fast"]
+    metadata:
+      provider: vllm
+      context_length: 8192
+
+  # =====================================================================
+  # SGLang Models (OpenAI-Compatible)
+  # =====================================================================
+  - model_name: sglang/llama3-8b
+    litellm_params:
+      model: sglang/llama3-8b
+      api_base: ${SGLANG_BASE_URL:http://localhost:8000}
+      api_key: ${SGLANG_API_KEY:dummy-key}
+    tags: ["sglang", "local", "llama", "optimized"]
+    metadata:
+      provider: sglang
+      context_length: 8192
+
+# =====================================================================
+# Fallback Configuration
+# =====================================================================
+litellm_settings:
+  # Fallback order when primary model is unavailable
+  fallback: ["gpt-3.5-turbo", "claude-3-haiku", "ollama/llama3"]
+
+  # Retry configuration
+  num_retries: 3
+  timeout: 120.0  # seconds
+
+  # Rate limiting
+  rpm_limit: 100  # requests per minute (if supported)
+
+  # Logging
+  set_verbose: false
+  drop_params: true
+
+  # Caching (optional)
+  cache:
+    type: "simple"
+    ttl: 3600  # seconds
+
+# =====================================================================
+# Provider-Specific Settings
+# =====================================================================
+# OpenAI settings
+openai:
+  api_base: ${OPENAI_API_BASE:https://api.openai.com/v1}
+  organization: ${OPENAI_ORGANIZATION}
+
+# Anthropic settings
+anthropic:
+  api_base: ${ANTHROPIC_API_BASE:https://api.anthropic.com}
+  max_tokens: 4096
+  temperature: 0.7
+
+# Ollama settings
+ollama:
+  api_base: ${OLLAMA_BASE_URL:http://localhost:11434}
+  num_ctx: 4096
+
+# vLLM settings
+vllm:
+  api_base: ${VLLM_BASE_URL:http://localhost:8000}
+  max_tokens: 4096
+
+# SGLang settings
+sglang:
+  api_base: ${SGLANG_BASE_URL:http://localhost:8000}
+  max_tokens: 4096

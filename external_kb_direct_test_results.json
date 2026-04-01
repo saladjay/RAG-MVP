@@ -1,0 +1,31 @@
+{
+  "config": {
+    "base_url": "http://128.23.77.226:6719",
+    "endpoint": "/cloudoa-ai/ai/file-knowledge/queryKnowledge",
+    "comp_id": "N000131",
+    "file_type": "PublicDocDispatch"
+  },
+  "total_tests": 3,
+  "successful": 3,
+  "failed": 0,
+  "results": [
+    {
+      "query": "2025年春节放假共计几天",
+      "success": true,
+      "chunk_count": 0,
+      "chunks": []
+    },
+    {
+      "query": "春节调休需上班日期是哪天",
+      "success": true,
+      "chunk_count": 0,
+      "chunks": []
+    },
+    {
+      "query": "test",
+      "success": true,
+      "chunk_count": 0,
+      "chunks": []
+    }
+  ]
+}

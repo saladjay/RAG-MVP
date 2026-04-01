@@ -1,50 +1,84 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!-- Sync Impact Report -->
+<!-- Version: 0.1.0 → 1.0.0 -->
+<!-- Modified principles: All core principles replaced with new documentation, testing, and governance principles -->
+<!-- Added sections: Documentation Standards, Testing Standards, Component Governance -->
+<!-- Templates updated: plan.md, spec.md, tasks.md -->
+<!-- TODO: Create base components documentation -->
+
+# OA Component Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Comprehensive Documentation (NON-NEGOTIABLE)
+Every file MUST include a header with content and API brief description. Headers MUST be updated immediately when file content changes. This enables AI systems to understand file contents without reading entire files, ensuring rapid context comprehension and preventing code-requirement divergence.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Architecture Visualization (MANDATORY)
+After completing main business logic, MUST create detailed call flow diagrams mapping every API call (document location → function name). Generate "compressed view" at `.specify/specs/xxxx/research.md` as single source of truth for implementation reference.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Real-First Testing (NON-NEGOTIABLE)
+Tests MUST use real implementations whenever possible. Mock testing is PROHIBITED except for: external services with no test environment, performance bottlenecks, or systems under active development. Blocking points in real test implementation MUST be reported immediately for resolution.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Environment Discipline (MANDATORY)
+Server application tests MUST start server script before execution. Python code execution MUST activate virtual environment using `uv` dependency management. No exceptions allowed for environment consistency.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Base Component Governance (NON-NEGOTIABLE)
+Existing base components MUST be documented and centrally registered. Private creation of additional base components is STRICTLY PROHIBITED. All modifications to base components require formal application and approval process.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+### VI. Package Management Discipline (MANDATORY)
+Python package management MUST use `uv` for dependency resolution, installation, and updates. Manual package management via pip is PROHIBITED without explicit justification.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+## Additional Requirements
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+### Code Quality Standards
+- All code MUST follow Python PEP 8 style guidelines
+- Type hints are MANDATORY for all function signatures
+- Docstrings are REQUIRED for all public interfaces
+- Error handling MUST be comprehensive and specific
+- Code complexity MUST be kept below 10 (McCabe metric)
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### Testing Requirements
+- Test coverage MUST exceed 80% for all business logic
+- Integration tests MUST cover all API endpoints
+- Performance tests MUST establish baseline metrics
+- Security tests MUST include input validation and authentication flows
+
+### User Experience Consistency
+- UI components MUST follow established design system
+- Error messages MUST be user-friendly and specific
+- Navigation patterns MUST be consistent across the application
+- Accessibility standards (WCAG 2.1 AA) MUST be met
+
+### Performance Requirements
+- API response times MUST be under 200ms p95 for standard operations
+- Database queries MUST be optimized with appropriate indexing
+- Memory usage MUST be monitored and optimized
+- Caching strategies MUST be implemented for repeated operations
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+### Amendment Process
+1. Proposal: Submit amendment request with detailed rationale
+2. Review: Core team evaluates impact and compliance
+3. Approval: Requires 2/3 majority of technical leads
+4. Implementation: Create migration plan with phased rollout
+5. Documentation: Update all relevant templates and guidelines
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+### Compliance Requirements
+- All pull requests MUST reference relevant constitution principles
+- Code reviews MUST verify compliance with all standards
+- Automated checks MUST validate documentation headers and test coverage
+- Performance benchmarks MUST be established and tracked
+
+### Quality Gates
+- 100% of tests must pass before deployment
+- Documentation headers must be present in all new files
+- No new technical debt without explicit approval
+- Regular architectural reviews (quarterly) for compliance
+
+### Violation Process
+- First offense: Warning and required correction
+- Second offense: Feature freeze until compliance
+- Third offense: Review by governance committee
+- Willful violations: Project membership revocation
+
+**Version**: 1.0.0 | **Ratified**: 2026-03-18 | **Last Amended**: 2026-03-18

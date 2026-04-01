@@ -113,3 +113,6 @@
 - **SC-002**: [Measurable metric, e.g., "System handles 1000 concurrent users without degradation"]
 - **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
 - **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
+- **SC-005**: [Documentation metric, e.g., "All files include header with API description"]
+- **SC-006**: [Test coverage metric, e.g., "80% code coverage for business logic"]
+- **SC-007**: [Performance metric, e.g., "API response time under 200ms p95"]

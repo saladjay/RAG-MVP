@@ -1,0 +1,432 @@
+{
+  "total_tests": 5,
+  "successful": 5,
+  "failed": 0,
+  "results": [
+    {
+      "title": "广东东方思维科技有限公司关于2025年度部分节假日安排及值班工作的通知——粤东科〔2024〕92号",
+      "query": "2025年春节放假共计几天？",
+      "expected_answers": [
+        "2025年春节放假共计8天，从1月28日（农历除夕）至2月4日（农历正月初七）。",
+        "根据文档内容，2025年春节放假共计8天，从1月28日（农历除夕、周二）至2月4日（农历正月初七、周二）放假调休。",
+        "8天",
+        "8天"
+      ],
+      "chunk_count": 5,
+      "chunks": [
+        {
+          "id": "mock_chunk_0",
+          "chunk_id": "mock_chunk_0",
+          "content": "Mock content for query: 2025年春节放假共计几天？ (chunk 0)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.95,
+            "position": 1,
+            "doc_metadata": {}
+          },
+          "score": 0.95,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_1",
+          "chunk_id": "mock_chunk_1",
+          "content": "Mock content for query: 2025年春节放假共计几天？ (chunk 1)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.8999999999999999,
+            "position": 2,
+            "doc_metadata": {}
+          },
+          "score": 0.8999999999999999,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_2",
+          "chunk_id": "mock_chunk_2",
+          "content": "Mock content for query: 2025年春节放假共计几天？ (chunk 2)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.85,
+            "position": 3,
+            "doc_metadata": {}
+          },
+          "score": 0.85,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_3",
+          "chunk_id": "mock_chunk_3",
+          "content": "Mock content for query: 2025年春节放假共计几天？ (chunk 3)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.7999999999999999,
+            "position": 4,
+            "doc_metadata": {}
+          },
+          "score": 0.7999999999999999,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_4",
+          "chunk_id": "mock_chunk_4",
+          "content": "Mock content for query: 2025年春节放假共计几天？ (chunk 4)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.75,
+            "position": 5,
+            "doc_metadata": {}
+          },
+          "score": 0.75,
+          "source_doc": "mock_document.txt"
+        }
+      ],
+      "success": true,
+      "error": null
+    },
+    {
+      "title": "广东东方思维科技有限公司关于2025年度部分节假日安排及值班工作的通知——粤东科〔2024〕92号",
+      "query": "春节调休需上班日期是哪天？",
+      "expected_answers": [
+        "根据文档内容，春节调休需上班的日期是1月26日（周日）和2月8日（周六）。",
+        "根据文档内容，春节调休需上班的日期是1月26日（周日）和2月8日（周六）。",
+        "1月26日和2月8日",
+        "1月26日和2月8日"
+      ],
+      "chunk_count": 5,
+      "chunks": [
+        {
+          "id": "mock_chunk_0",
+          "chunk_id": "mock_chunk_0",
+          "content": "Mock content for query: 春节调休需上班日期是哪天？ (chunk 0)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.95,
+            "position": 1,
+            "doc_metadata": {}
+          },
+          "score": 0.95,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_1",
+          "chunk_id": "mock_chunk_1",
+          "content": "Mock content for query: 春节调休需上班日期是哪天？ (chunk 1)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.8999999999999999,
+            "position": 2,
+            "doc_metadata": {}
+          },
+          "score": 0.8999999999999999,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_2",
+          "chunk_id": "mock_chunk_2",
+          "content": "Mock content for query: 春节调休需上班日期是哪天？ (chunk 2)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.85,
+            "position": 3,
+            "doc_metadata": {}
+          },
+          "score": 0.85,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_3",
+          "chunk_id": "mock_chunk_3",
+          "content": "Mock content for query: 春节调休需上班日期是哪天？ (chunk 3)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.7999999999999999,
+            "position": 4,
+            "doc_metadata": {}
+          },
+          "score": 0.7999999999999999,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_4",
+          "chunk_id": "mock_chunk_4",
+          "content": "Mock content for query: 春节调休需上班日期是哪天？ (chunk 4)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.75,
+            "position": 5,
+            "doc_metadata": {}
+          },
+          "score": 0.75,
+          "source_doc": "mock_document.txt"
+        }
+      ],
+      "success": true,
+      "error": null
+    },
+    {
+      "title": "广东东方思维科技有限公司关于2025年度部分节假日安排及值班工作的通知——粤东科〔2024〕92号",
+      "query": "国庆中秋放假时长是几天？",
+      "expected_answers": [
+        "国庆中秋放假时长是8天，从10月1日（周三）至8日（周三）放假调休。",
+        "根据文档内容，国庆中秋放假时长是8天，从10月1日（周三）至8日（周三）放假调休。",
+        "8天",
+        "8天"
+      ],
+      "chunk_count": 5,
+      "chunks": [
+        {
+          "id": "mock_chunk_0",
+          "chunk_id": "mock_chunk_0",
+          "content": "Mock content for query: 国庆中秋放假时长是几天？ (chunk 0)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.95,
+            "position": 1,
+            "doc_metadata": {}
+          },
+          "score": 0.95,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_1",
+          "chunk_id": "mock_chunk_1",
+          "content": "Mock content for query: 国庆中秋放假时长是几天？ (chunk 1)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.8999999999999999,
+            "position": 2,
+            "doc_metadata": {}
+          },
+          "score": 0.8999999999999999,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_2",
+          "chunk_id": "mock_chunk_2",
+          "content": "Mock content for query: 国庆中秋放假时长是几天？ (chunk 2)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.85,
+            "position": 3,
+            "doc_metadata": {}
+          },
+          "score": 0.85,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_3",
+          "chunk_id": "mock_chunk_3",
+          "content": "Mock content for query: 国庆中秋放假时长是几天？ (chunk 3)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.7999999999999999,
+            "position": 4,
+            "doc_metadata": {}
+          },
+          "score": 0.7999999999999999,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_4",
+          "chunk_id": "mock_chunk_4",
+          "content": "Mock content for query: 国庆中秋放假时长是几天？ (chunk 4)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.75,
+            "position": 5,
+            "doc_metadata": {}
+          },
+          "score": 0.75,
+          "source_doc": "mock_document.txt"
+        }
+      ],
+      "success": true,
+      "error": null
+    },
+    {
+      "title": "广东东方思维科技有限公司关于2025年度部分节假日安排及值班工作的通知——粤东科〔2024〕92号",
+      "query": "值班车辆牌号是什么？",
+      "expected_answers": [
+        "根据文档内容，值班车辆牌号是粤APA205。",
+        "根据文档内容，值班车辆的牌号是粤APA205。",
+        "粤APA205",
+        "粤APA205"
+      ],
+      "chunk_count": 5,
+      "chunks": [
+        {
+          "id": "mock_chunk_0",
+          "chunk_id": "mock_chunk_0",
+          "content": "Mock content for query: 值班车辆牌号是什么？ (chunk 0)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.95,
+            "position": 1,
+            "doc_metadata": {}
+          },
+          "score": 0.95,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_1",
+          "chunk_id": "mock_chunk_1",
+          "content": "Mock content for query: 值班车辆牌号是什么？ (chunk 1)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.8999999999999999,
+            "position": 2,
+            "doc_metadata": {}
+          },
+          "score": 0.8999999999999999,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_2",
+          "chunk_id": "mock_chunk_2",
+          "content": "Mock content for query: 值班车辆牌号是什么？ (chunk 2)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.85,
+            "position": 3,
+            "doc_metadata": {}
+          },
+          "score": 0.85,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_3",
+          "chunk_id": "mock_chunk_3",
+          "content": "Mock content for query: 值班车辆牌号是什么？ (chunk 3)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.7999999999999999,
+            "position": 4,
+            "doc_metadata": {}
+          },
+          "score": 0.7999999999999999,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_4",
+          "chunk_id": "mock_chunk_4",
+          "content": "Mock content for query: 值班车辆牌号是什么？ (chunk 4)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.75,
+            "position": 5,
+            "doc_metadata": {}
+          },
+          "score": 0.75,
+          "source_doc": "mock_document.txt"
+        }
+      ],
+      "success": true,
+      "error": null
+    },
+    {
+      "title": "广东东方思维科技有限公司关于2025年度部分节假日安排及值班工作的通知——粤东科〔2024〕92号",
+      "query": "元旦放假是否安排调休？",
+      "expected_answers": [
+        "根据文档内容，元旦放假不安排调休。",
+        "文档中明确说明：元旦放假1天，不调休。",
+        "不调休",
+        "不调休"
+      ],
+      "chunk_count": 5,
+      "chunks": [
+        {
+          "id": "mock_chunk_0",
+          "chunk_id": "mock_chunk_0",
+          "content": "Mock content for query: 元旦放假是否安排调休？ (chunk 0)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.95,
+            "position": 1,
+            "doc_metadata": {}
+          },
+          "score": 0.95,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_1",
+          "chunk_id": "mock_chunk_1",
+          "content": "Mock content for query: 元旦放假是否安排调休？ (chunk 1)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.8999999999999999,
+            "position": 2,
+            "doc_metadata": {}
+          },
+          "score": 0.8999999999999999,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_2",
+          "chunk_id": "mock_chunk_2",
+          "content": "Mock content for query: 元旦放假是否安排调休？ (chunk 2)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.85,
+            "position": 3,
+            "doc_metadata": {}
+          },
+          "score": 0.85,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_3",
+          "chunk_id": "mock_chunk_3",
+          "content": "Mock content for query: 元旦放假是否安排调休？ (chunk 3)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.7999999999999999,
+            "position": 4,
+            "doc_metadata": {}
+          },
+          "score": 0.7999999999999999,
+          "source_doc": "mock_document.txt"
+        },
+        {
+          "id": "mock_chunk_4",
+          "chunk_id": "mock_chunk_4",
+          "content": "Mock content for query: 元旦放假是否安排调休？ (chunk 4)",
+          "metadata": {
+            "title": "Mock Document",
+            "document_name": "mock_document.txt",
+            "score": 0.75,
+            "position": 5,
+            "doc_metadata": {}
+          },
+          "score": 0.75,
+          "source_doc": "mock_document.txt"
+        }
+      ],
+      "success": true,
+      "error": null
+    }
+  ]
+}
