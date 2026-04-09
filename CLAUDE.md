@@ -15,6 +15,7 @@ Auto-generated from all feature plans. Last updated: 2026-04-01
 - Langfuse SDK - Observability platform for prompt management and traces (feature 001, 003)
 - Phidata - Agent orchestration and behavior observation (feature 001)
 - OpenAI API - LLM inference (feature 001)
+- sentence-transformers - Text embeddings for similarity-based hallucination detection (feature 005)
 
 ### Data Storage
 - Milvus - Vector database for knowledge chunks (feature 001)
@@ -60,13 +61,21 @@ The repository uses a feature-based structure with separate branches for each se
 
 ```
 src/
-├── rag_service/                    # Feature 001: RAG Service MVP
+├── rag_service/                    # Feature 001: RAG Service MVP / Feature 005: QA Pipeline
 │   ├── main.py                     # FastAPI application
 │   ├── config.py                   # Pydantic settings
 │   ├── core/                       # Exceptions, logger
 │   ├── capabilities/               # Capability interface layer
+│   │   ├── qa_pipeline.py          # QA pipeline orchestration (005)
+│   │   ├── query_rewrite.py        # Query rewriting capability (005)
+│   │   └── hallucination_detection.py  # Hallucination detection (005)
 │   ├── services/                   # Business logic
+│   │   └── default_fallback.py     # Default fallback messages (005)
+│   ├── clients/                    # External service clients
+│   │   └── external_kb_client.py   # External KB HTTP client (001, updated 005)
 │   └── api/                        # Routes, schemas
+│       ├── qa_routes.py            # QA API endpoints (005)
+│       └── qa_schemas.py           # QA request/response models (005)
 │
 ├── prompt_service/                 # Feature 003: Prompt Service
 │   ├── main.py                     # FastAPI application
@@ -264,6 +273,15 @@ class PromptRetrievalService:
 - Never block the event loop (no sync I/O in async functions)
 
 ## Recent Changes
+
+### Feature 005: RAG QA Pipeline (2026-04-01)
+Added complete question-answering pipeline to RAG Service. Introduces:
+- Query rewriting capability for improved retrieval
+- External knowledge base integration with fallback responses
+- Answer generation with source citations
+- Similarity-based hallucination detection
+- Streaming response support with async verification
+- Default fallback messages for KB errors
 
 ### Feature 004: UV Python Install (2026-03-20)
 Added CLI tool for Python runtime management using uv. Introduces:

@@ -2,12 +2,15 @@
 Model Inference Capability for RAG Service.
 
 This capability provides unified access to LLM inference operations
-via the LiteLLM gateway. HTTP endpoints use this capability - they
-NEVER access LiteLLM directly.
+via multiple gateway backends:
+- LiteLLM Gateway: Multi-provider model access (OpenAI, Anthropic, Ollama, etc.)
+- HTTP Gateway: Direct HTTP calls to cloud APIs
+
+HTTP endpoints use this capability - they NEVER access gateways directly.
 """
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, AsyncGenerator, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -23,6 +26,10 @@ from rag_service.core.logger import get_logger
 logger = get_logger(__name__)
 
 
+# Gateway backend type
+GatewayBackend = Literal["litellm", "http"]
+
+
 class ModelInferenceInput(CapabilityInput):
     """
     Input for model inference operations.
@@ -32,6 +39,7 @@ class ModelInferenceInput(CapabilityInput):
         model: Model identifier (uses default if not specified).
         max_tokens: Maximum tokens in response.
         temperature: Sampling temperature.
+        gateway_backend: Which gateway to use (litellm or http).
         context: Optional context information.
     """
 
@@ -39,6 +47,7 @@ class ModelInferenceInput(CapabilityInput):
     model: Optional[str] = Field(default=None, description="Model identifier")
     max_tokens: int = Field(default=1000, ge=1, le=32000, description="Max tokens")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
+    gateway_backend: GatewayBackend = Field(default="litellm", description="Gateway backend to use")
     context: Optional[str] = Field(default=None, description="Additional context")
 
     @model_validator(mode="after")
@@ -70,28 +79,41 @@ class ModelInferenceCapability(Capability[ModelInferenceInput, ModelInferenceOut
     """
     Capability for LLM model inference.
 
-    This capability wraps LiteLLM gateway operations and provides
-    a unified interface for model inference. HTTP endpoints use this
-    capability to access LiteLLM - they NEVER access LiteLLM directly.
+    This capability wraps multiple gateway backends and provides
+    a unified interface for model inference:
+    - LiteLLM Gateway: Multi-provider support (OpenAI, Anthropic, Ollama)
+    - HTTP Gateway: Direct HTTP calls to cloud APIs
+
+    HTTP endpoints use this capability - they NEVER access gateways directly.
 
     Features:
-    - Multi-model support via LiteLLM
+    - Multi-gateway support with automatic selection
     - Configurable generation parameters
     - Token usage tracking
     - Performance monitoring
     """
 
-    def __init__(self, litellm_client: Optional[Any] = None, default_model: str = "gpt-3.5-turbo") -> None:
+    def __init__(
+        self,
+        litellm_client: Optional[Any] = None,
+        http_client: Optional[Any] = None,
+        default_model: str = "gpt-3.5-turbo",
+        default_gateway: GatewayBackend = "litellm",
+    ) -> None:
         """
         Initialize ModelInferenceCapability.
 
         Args:
             litellm_client: LiteLLM client instance (injected dependency).
+            http_client: HTTP gateway client instance (injected dependency).
             default_model: Default model to use if not specified.
+            default_gateway: Default gateway backend to use.
         """
         super().__init__()
         self._litellm_client = litellm_client
+        self._http_client = http_client
         self._default_model = default_model
+        self._default_gateway = default_gateway
 
     async def execute(self, input_data: ModelInferenceInput) -> ModelInferenceOutput:
         """
@@ -107,22 +129,33 @@ class ModelInferenceCapability(Capability[ModelInferenceInput, ModelInferenceOut
             GenerationError: If inference fails.
         """
         start_time = time.time()
+        gateway_backend = input_data.gateway_backend or self._default_gateway
         model = input_data.model or self._default_model
 
         try:
-            # Use LiteLLM Gateway for actual inference
-            if self._litellm_client is None:
-                # Import gateway if not provided
-                from rag_service.inference.gateway import get_gateway
-                self._litellm_client = await get_gateway()
+            if gateway_backend == "http":
+                # Use HTTP Gateway for cloud API calls
+                if self._http_client is None:
+                    from rag_service.inference.gateway import get_http_gateway
+                    self._http_client = await get_http_gateway()
 
-            # Call async completion
-            result = await self._litellm_client.acomplete(
-                prompt=input_data.prompt,
-                model_hint=model,
-                max_tokens=input_data.max_tokens,
-                temperature=input_data.temperature,
-            )
+                result = await self._http_client.acomplete(
+                    prompt=input_data.prompt,
+                    max_tokens=input_data.max_tokens,
+                    temperature=input_data.temperature,
+                )
+            else:
+                # Use LiteLLM Gateway for multi-provider support
+                if self._litellm_client is None:
+                    from rag_service.inference.gateway import get_gateway
+                    self._litellm_client = await get_gateway()
+
+                result = await self._litellm_client.acomplete(
+                    prompt=input_data.prompt,
+                    model_hint=model,
+                    max_tokens=input_data.max_tokens,
+                    temperature=input_data.temperature,
+                )
 
             elapsed_ms = (time.time() - start_time) * 1000
 
@@ -130,6 +163,7 @@ class ModelInferenceCapability(Capability[ModelInferenceInput, ModelInferenceOut
                 "Model inference completed",
                 extra={
                     "trace_id": input_data.trace_id,
+                    "gateway": gateway_backend,
                     "model": result.model,
                     "provider": result.provider,
                     "input_tokens": result.input_tokens,
@@ -152,6 +186,7 @@ class ModelInferenceCapability(Capability[ModelInferenceInput, ModelInferenceOut
                 metadata={
                     "temperature": input_data.temperature,
                     "provider": result.provider,
+                    "gateway": gateway_backend,
                 },
             )
 
@@ -160,12 +195,74 @@ class ModelInferenceCapability(Capability[ModelInferenceInput, ModelInferenceOut
                 "Model inference failed",
                 extra={
                     "trace_id": input_data.trace_id,
+                    "gateway": gateway_backend,
                     "model": model,
                     "error": str(e),
                 },
             )
             raise GenerationError(
-                message=f"Inference failed with model '{model}'",
+                message=f"Inference failed with model '{model}' via {gateway_backend}",
+                detail=str(e),
+            ) from e
+
+    async def stream_execute(
+        self,
+        input_data: ModelInferenceInput,
+    ) -> AsyncGenerator[str, None]:
+        """
+        Execute model inference with streaming response.
+
+        Args:
+            input_data: Inference parameters.
+
+        Yields:
+            Individual tokens of the generated text.
+
+        Raises:
+            GenerationError: If inference fails.
+        """
+        gateway_backend = input_data.gateway_backend or self._default_gateway
+        model = input_data.model or self._default_model
+
+        try:
+            if gateway_backend == "http":
+                # Use HTTP Gateway for streaming
+                if self._http_client is None:
+                    from rag_service.inference.gateway import get_http_gateway
+                    self._http_client = await get_http_gateway()
+
+                async for token in self._http_client.astream_complete(
+                    prompt=input_data.prompt,
+                    max_tokens=input_data.max_tokens,
+                    temperature=input_data.temperature,
+                ):
+                    yield token
+            else:
+                # Use LiteLLM Gateway for streaming
+                if self._litellm_client is None:
+                    from rag_service.inference.gateway import get_gateway
+                    self._litellm_client = await get_gateway()
+
+                async for token in self._litellm_client.astream_complete(
+                    prompt=input_data.prompt,
+                    model_hint=model,
+                    max_tokens=input_data.max_tokens,
+                    temperature=input_data.temperature,
+                ):
+                    yield token
+
+        except Exception as e:
+            logger.error(
+                "Model inference streaming failed",
+                extra={
+                    "trace_id": input_data.trace_id,
+                    "gateway": gateway_backend,
+                    "model": model,
+                    "error": str(e),
+                },
+            )
+            raise GenerationError(
+                message=f"Streaming inference failed with model '{model}' via {gateway_backend}",
                 detail=str(e),
             ) from e
 

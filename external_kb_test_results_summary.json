@@ -1,0 +1,87 @@
+{
+  "timestamp": "2026-04-02T15:46:53.903363",
+  "config": {
+    "external_kb_url": "http://128.23.77.226:6719",
+    "company_id": "N000131",
+    "file_type": "PublicDocDispatch"
+  },
+  "summary": {
+    "total_tests": 10,
+    "successful": 10,
+    "failed": 0,
+    "total_chunks": 0,
+    "avg_latency_ms": 397.2466707229614
+  },
+  "results": [
+    {
+      "query": "2025年春节放假共计几天？",
+      "success": true,
+      "latency_ms": 853.0416488647461,
+      "chunk_count": 0,
+      "chunks": []
+    },
+    {
+      "query": "春节调休需上班日期是哪天？",
+      "success": true,
+      "latency_ms": 305.59825897216797,
+      "chunk_count": 0,
+      "chunks": []
+    },
+    {
+      "query": "国庆中秋放假时长是几天？",
+      "success": true,
+      "latency_ms": 349.6582508087158,
+      "chunk_count": 0,
+      "chunks": []
+    },
+    {
+      "query": "值班车辆牌号是什么？",
+      "success": true,
+      "latency_ms": 377.6063919067383,
+      "chunk_count": 0,
+      "chunks": []
+    },
+    {
+      "query": "元旦放假是否安排调休？",
+      "success": true,
+      "latency_ms": 426.00035667419434,
+      "chunk_count": 0,
+      "chunks": []
+    },
+    {
+      "query": "值班电话需保障通畅吗？",
+      "success": true,
+      "latency_ms": 386.2149715423584,
+      "chunk_count": 0,
+      "chunks": []
+    },
+    {
+      "query": "2025年春节从哪天开始放假？",
+      "success": true,
+      "latency_ms": 347.0187187194824,
+      "chunk_count": 0,
+      "chunks": []
+    },
+    {
+      "query": "节假日自家车要停在什么地方？",
+      "success": true,
+      "latency_ms": 316.1313533782959,
+      "chunk_count": 0,
+      "chunks": []
+    },
+    {
+      "query": "值班期间手机必须24小时开机吗？",
+      "success": true,
+      "latency_ms": 299.29590225219727,
+      "chunk_count": 0,
+      "chunks": []
+    },
+    {
+      "query": "清明节放假几天？",
+      "success": true,
+      "latency_ms": 311.9008541107178,
+      "chunk_count": 0,
+      "chunks": []
+    }
+  ]
+}

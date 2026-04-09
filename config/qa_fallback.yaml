@@ -1,0 +1,42 @@
+# Default Fallback Messages for RAG QA Pipeline
+#
+# These messages are returned when the external knowledge base is unavailable
+# or returns empty results. Messages can include placeholders that will be
+# replaced at runtime (e.g., {company_name}, {contact_email}).
+
+fallback_messages:
+  # External KB unavailable (network error, timeout, service down)
+  kb_unavailable:
+    zh: "抱歉，知识库暂时无法访问。请稍后再试，或联系管理员获取帮助。"
+    en: "Sorry, the knowledge base is temporarily unavailable. Please try again later or contact the administrator for assistance."
+
+  # KB returned empty results (no documents found)
+  kb_empty:
+    zh: "抱歉，没有找到与您的问题相关的信息。请尝试重新表述您的问题，或者联系管理员获取帮助。"
+    en: "Sorry, no relevant information was found for your question. Please try rephrasing your question or contact the administrator for assistance."
+
+  # KB returned an error (invalid request, server error)
+  kb_error:
+    zh: "抱歉，查询知识库时发生错误。请联系管理员并提供以下信息：错误代码 {error_code}。"
+    en: "Sorry, an error occurred while querying the knowledge base. Please contact the administrator with the following information: Error code {error_code}."
+
+  # Hallucination detection failed or regeneration failed
+  hallucination_failed:
+    zh: "抱歉，无法完全验证答案的准确性。以下内容可能包含未经验证的信息，请谨慎参考。"
+    en: "Sorry, the answer could not be fully verified for accuracy. The following content may contain unverified information. Please use with caution."
+
+  # Regeneration failed (max attempts exceeded)
+  regeneration_failed:
+    zh: "抱歉，生成答案时遇到困难。系统已尝试多次但未能通过验证。请尝试重新表述您的问题。"
+    en: "Sorry, difficulties were encountered while generating the answer. The system tried multiple times but could not pass verification. Please try rephrasing your question."
+
+  # Query processing timeout
+  timeout:
+    zh: "抱歉，处理请求超时。请尝试简化您的问题，或者稍后再试。"
+    en: "Sorry, the request processing timed out. Please try simplifying your question or try again later."
+
+# Placeholders that can be used in fallback messages
+# - {company_name}: Company name
+# - {contact_email}: Administrator contact email
+# - {error_code}: Error code from KB
+# - {query}: Original user query (truncated)

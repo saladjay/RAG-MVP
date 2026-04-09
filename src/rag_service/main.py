@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from rag_service.api.routes import router
+from rag_service.api.qa_routes import router as qa_router
+from rag_service.api.kb_upload_routes import router as kb_upload_router
 from rag_service.capabilities.base import get_capability_registry
 from rag_service.capabilities.external_kb_query import ExternalKBQueryCapability
 from rag_service.capabilities.health_check import HealthCheckCapability
@@ -21,6 +23,7 @@ from rag_service.capabilities.model_discovery import ModelDiscoveryCapability
 from rag_service.capabilities.model_inference import ModelInferenceCapability
 from rag_service.capabilities.trace_observation import TraceObservationCapability
 from rag_service.capabilities.document_management import DocumentManagementCapability
+from rag_service.capabilities.milvus_kb_upload import MilvusKBUploadCapability
 from rag_service.config import get_settings
 from rag_service.core.logger import get_logger, set_trace_id
 
@@ -41,7 +44,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     logger.info("Starting RAG Service MVP")
     logger.info(f"Milvus: {settings.milvus.connection_url}")
-    logger.info(f"LiteLLM Model: {settings.litellm.model}")
+
+    # Show model configuration based on default gateway
+    if settings.default_gateway == "http" and settings.cloud_completion.url:
+        logger.info(f"Model Gateway: HTTP (Cloud Completion)")
+        logger.info(f"Model: {settings.cloud_completion.model}")
+        logger.info(f"Cloud URL: {settings.cloud_completion.url}")
+    else:
+        logger.info(f"Model Gateway: LiteLLM")
+        logger.info(f"Model: {settings.litellm.model}")
+
     logger.info(f"Langfuse Enabled: {settings.langfuse.enabled}")
 
     # Initialize capability registry
@@ -53,9 +65,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     registry.register(KnowledgeQueryCapability(milvus_client=None))
     registry.register(ExternalKBQueryCapability())
     registry.register(ModelInferenceCapability(litellm_client=None))
-    registry.register(TraceObservationCapability(langfuse_client=None))
-    registry.register(DocumentManagementCapability(milvus_client=None))
+    registry.register(TraceObservationCapability(trace_manager=None))
+    registry.register(DocumentManagementCapability(knowledge_base=None))
     registry.register(ModelDiscoveryCapability(litellm_client=None))
+    registry.register(MilvusKBUploadCapability())
 
     logger.info(f"Registered capabilities: {registry.list_capabilities()}")
 
@@ -133,6 +146,8 @@ def create_app() -> FastAPI:
 
     # Include routes
     app.include_router(router)
+    app.include_router(qa_router)
+    app.include_router(kb_upload_router)
 
     # Root endpoint
     @app.get("/")

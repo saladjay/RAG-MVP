@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-04-08T15:56:35.044535",
+  "test_config": {
+    "questions_file": "questions\\fianl_version_qa.jsonl",
+    "milvus_uri": "http://localhost:19530",
+    "collection_name": "knowledge_base",
+    "limit": 1
+  },
+  "statistics": {
+    "total": 1,
+    "correct": 0,
+    "incorrect": 1,
+    "error": 0,
+    "accuracy": 0.0,
+    "avg_confidence": 0
+  },
+  "detailed_logs": []
+}

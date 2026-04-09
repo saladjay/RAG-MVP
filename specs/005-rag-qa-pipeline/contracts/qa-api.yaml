@@ -1,0 +1,499 @@
+openapi: 3.0.3
+info:
+  title: RAG QA Pipeline API
+  description: |
+    Question-Answering pipeline API that processes natural language queries
+    through query rewriting, knowledge base retrieval, answer generation,
+    and hallucination detection.
+  version: 1.0.0
+  contact:
+    name: RAG Service Team
+
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: http://{host}:{port}
+    description: Production server
+    variables:
+      host:
+        default: api.example.com
+      port:
+        default: "8000"
+
+tags:
+  - name: QA
+    description: Question-Answering endpoints
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /qa/query:
+    post:
+      tags: [QA]
+      summary: Submit a query for QA processing
+      description: |
+        Processes a natural language query through the complete QA pipeline:
+        1. Query rewriting (optional)
+        2. Knowledge base retrieval
+        3. Answer generation
+        4. Hallucination detection (optional)
+
+        Returns a comprehensive answer with source citations and verification status.
+      operationId: qaQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QAQueryRequest'
+            examples:
+              basic_query:
+                summary: Basic query
+                value:
+                  query: "2025年春节放假几天？"
+              query_with_context:
+                summary: Query with company context
+                value:
+                  query: "假期安排"
+                  context:
+                    company_id: "N000131"
+                    file_type: "PublicDocDispatch"
+              query_with_options:
+                summary: Query with custom options
+                value:
+                  query: "怎么请假？"
+                  options:
+                    enable_query_rewrite: true
+                    enable_hallucination_check: true
+                    top_k: 5
+      responses:
+        "200":
+          description: Successful query processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QAQueryResponse'
+              examples:
+                successful_answer:
+                  summary: Successful answer with verification
+                  value:
+                    answer: "2025年春节放假共计8天，从1月28日（农历除夕）至2月4日（农历正月初七）。"
+                    sources:
+                      - chunk_id: "seg_12345"
+                        document_id: "doc_67890"
+                        document_name: "关于2025年度部分节假日安排的通知"
+                        dataset_id: "ds_001"
+                        dataset_name: "公司制度"
+                        score: 0.95
+                        content_preview: "2025年春节放假共计8天，从1月28日..."
+                    hallucination_status:
+                      checked: true
+                      passed: true
+                      confidence: 0.92
+                      flagged_claims: []
+                    metadata:
+                      trace_id: "trace_abc123"
+                      query_rewritten: true
+                      original_query: "春节放假几天？"
+                      rewritten_query: "2025年春节放假安排"
+                      retrieval_count: 5
+                      timing_ms:
+                        total_ms: 4500
+                        rewrite_ms: 1200
+                        retrieve_ms: 500
+                        generate_ms: 2500
+                        verify_ms: 300
+                answer_with_warning:
+                  summary: Answer with hallucination warning
+                  value:
+                    answer: "根据现有信息，2025年春节放假安排如下：..."
+                    sources: []
+                    hallucination_status:
+                      checked: true
+                      passed: false
+                      confidence: 0.45
+                      flagged_claims: ["放假时间为1月28日至2月4日"]
+                      warning_message: "部分信息无法从检索到的文档中完全验证，请谨慎参考。"
+                    metadata:
+                      trace_id: "trace_def456"
+                      query_rewritten: false
+                      original_query: "春节有什么福利？"
+                      retrieval_count: 0
+                      timing_ms:
+                        total_ms: 3200
+                        retrieve_ms: 400
+                        generate_ms: 2800
+                fallback_response:
+                  summary: Fallback response for empty KB
+                  value:
+                    answer: "抱歉，没有找到与您的问题相关的信息。请尝试重新表述您的问题，或者联系管理员获取帮助。"
+                    sources: []
+                    hallucination_status:
+                      checked: false
+                      passed: false
+                      confidence: 0.0
+                      warning_message: "知识库中没有找到相关文档"
+                    metadata:
+                      trace_id: "trace_ghi789"
+                      query_rewritten: true
+                      original_query: "公司股票代码是多少？"
+                      rewritten_query: "公司股票代码查询"
+                      retrieval_count: 0
+                      timing_ms:
+                        total_ms: 1500
+                        rewrite_ms: 800
+                        retrieve_ms: 700
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QAErrorResponse'
+              examples:
+                invalid_query:
+                  summary: Empty query
+                  value:
+                    error: "invalid_query"
+                    message: "Query cannot be empty"
+                    detail: "The 'query' field must contain at least 1 non-whitespace character"
+                    trace_id: "trace_err001"
+                invalid_context:
+                  summary: Invalid company ID
+                  value:
+                    error: "invalid_query"
+                    message: "Invalid company_id format"
+                    detail: "company_id must match pattern N{digits} (e.g., N000131)"
+                    trace_id: "trace_err002"
+        "503":
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QAErrorResponse'
+              examples:
+                kb_unavailable:
+                  summary: External KB down
+                  value:
+                    error: "kb_unavailable"
+                    message: "知识库暂时无法访问，请稍后再试"
+                    detail: "External knowledge base returned error 503"
+                    trace_id: "trace_err003"
+                    is_fallback: true
+
+  /qa/query/stream:
+    post:
+      tags: [QA]
+      summary: Submit a query with streaming response
+      description: |
+        Processes a query like /qa/query but streams the response tokens.
+        Hallucination detection runs asynchronously and status is sent
+        via X-Hallucination-Checked header.
+
+        Client should:
+        1. Process streaming tokens as they arrive
+        2. Monitor X-Hallucination-Checked header
+        3. Display verification status to user
+      operationId: qaQueryStream
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QAQueryRequest'
+      responses:
+        "200":
+          description: Streaming response
+          headers:
+            X-Hallucination-Checked:
+              description: |
+                Hallucination verification status:
+                - pending: Verification in progress
+                - passed: Verification completed, no issues
+                - failed: Hallucination detected
+                - skipped: Verification not performed
+              schema:
+                type: string
+                enum: [pending, passed, failed, skipped]
+              example: "pending"
+            X-Trace-ID:
+              description: Trace ID for debugging
+              schema:
+                type: string
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream of answer tokens
+
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Check service health status
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  schemas:
+    QAQueryRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: User's natural language question
+          example: "2025年春节放假几天？"
+        context:
+          $ref: '#/components/schemas/QAContext'
+        options:
+          $ref: '#/components/schemas/QAOptions'
+
+    QAContext:
+      type: object
+      required:
+        - company_id
+      properties:
+        company_id:
+          type: string
+          pattern: '^N\d{6,}$'
+          description: Company unique code
+          example: "N000131"
+        file_type:
+          type: string
+          enum: [PublicDocReceive, PublicDocDispatch]
+          default: PublicDocDispatch
+          description: Document type filter
+        doc_date:
+          type: string
+          description: Optional document date filter (YYYY-MM-DD format)
+          example: "2025-01-01"
+
+    QAOptions:
+      type: object
+      properties:
+        enable_query_rewrite:
+          type: boolean
+          default: true
+          description: Enable query rewriting
+        enable_hallucination_check:
+          type: boolean
+          default: true
+          description: Enable hallucination detection
+        top_k:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 10
+          description: Number of chunks to retrieve
+        stream:
+          type: boolean
+          default: false
+          description: Enable streaming response
+
+    QAQueryResponse:
+      type: object
+      required:
+        - answer
+        - sources
+        - hallucination_status
+        - metadata
+      properties:
+        answer:
+          type: string
+          description: Generated answer
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/QASourceInfo'
+          description: Source document information
+        hallucination_status:
+          $ref: '#/components/schemas/HallucinationStatus'
+        metadata:
+          $ref: '#/components/schemas/QAMetadata'
+
+    QASourceInfo:
+      type: object
+      required:
+        - chunk_id
+        - document_id
+        - document_name
+        - dataset_id
+        - dataset_name
+        - score
+        - content_preview
+      properties:
+        chunk_id:
+          type: string
+          description: Chunk identifier
+        document_id:
+          type: string
+          description: Source document ID
+        document_name:
+          type: string
+          description: Source document name
+        dataset_id:
+          type: string
+          description: Dataset ID
+        dataset_name:
+          type: string
+          description: Dataset name
+        score:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Retrieval relevance score
+        content_preview:
+          type: string
+          maxLength: 200
+          description: First 200 characters of chunk content
+
+    HallucinationStatus:
+      type: object
+      required:
+        - checked
+        - passed
+        - confidence
+      properties:
+        checked:
+          type: boolean
+          description: Whether verification was performed
+        passed:
+          type: boolean
+          description: Whether verification passed
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Confidence score
+        flagged_claims:
+          type: array
+          items:
+            type: string
+          description: Flagged claims if verification failed
+          example: ["放假时间为1月28日至2月4日"]
+        warning_message:
+          type: string
+          description: Warning message if verification failed
+
+    QAMetadata:
+      type: object
+      required:
+        - trace_id
+        - query_rewritten
+        - original_query
+        - retrieval_count
+        - timing_ms
+      properties:
+        trace_id:
+          type: string
+          description: Trace ID for observability
+        query_rewritten:
+          type: boolean
+          description: Whether query was rewritten
+        original_query:
+          type: string
+          description: Original user query
+        rewritten_query:
+          type: string
+          description: Rewritten query if applicable
+        retrieval_count:
+          type: integer
+          description: Number of chunks retrieved
+        timing_ms:
+          $ref: '#/components/schemas/QATiming'
+
+    QATiming:
+      type: object
+      required:
+        - total_ms
+        - retrieve_ms
+        - generate_ms
+      properties:
+        total_ms:
+          type: number
+          format: float
+          description: Total end-to-end time in milliseconds
+        rewrite_ms:
+          type: number
+          format: float
+          description: Query rewriting time
+          nullable: true
+        retrieve_ms:
+          type: number
+          format: float
+          description: Retrieval time
+        generate_ms:
+          type: number
+          format: float
+          description: Answer generation time
+        verify_ms:
+          type: number
+          format: float
+          description: Hallucination check time
+          nullable: true
+
+    QAErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - trace_id
+      properties:
+        error:
+          type: string
+          description: Error type
+          enum:
+            - invalid_query
+            - kb_unavailable
+            - kb_empty
+            - kb_error
+            - generation_failed
+            - verification_failed
+            - timeout
+        message:
+          type: string
+          description: User-friendly error message
+        detail:
+          type: string
+          description: Detailed error information
+        trace_id:
+          type: string
+          description: Trace ID for debugging
+        is_fallback:
+          type: boolean
+          description: Whether fallback response was provided
+          default: false
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        qa_pipeline:
+          type: object
+          properties:
+            status:
+              type: string
+            external_kb:
+              type: string
+            litellm:
+              type: string
+            hallucination_detector:
+              type: string

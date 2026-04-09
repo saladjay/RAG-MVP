@@ -1,0 +1,129 @@
+# Prompt Templates for RAG QA Pipeline
+#
+# These prompts are used for query rewriting, answer generation, and
+# hallucination detection. Prompts support Jinja2-style variable interpolation.
+
+prompts:
+  # Query Rewrite Prompt
+  # Purpose: Rewrite user queries to improve retrieval accuracy
+  # Variables: {original_query}, {company_id}, {file_type}, {current_date}
+  query_rewrite_prompt: |
+    You are a query optimization assistant for a document knowledge base.
+    Your task is to rewrite the user's query to improve retrieval accuracy.
+
+    Context:
+    - Company ID: {{ company_id }}
+    - Document type: {{ file_type }}
+    - Current date: {{ current_date }}
+
+    Original query: {{ original_query }}
+
+    Rewrite the query to be:
+    1. More specific and complete
+    2. Using formal terminology appropriate for document search
+    3. Including relevant context (year, document type if applicable)
+
+    Guidelines:
+    - If the query mentions time periods like "holiday", "leave", add the year
+    - If the query is about policies, add the document type context
+    - Keep the query concise (under 500 characters)
+    - Preserve the original intent and meaning
+    - Use formal Chinese language for business documents
+
+    Return ONLY the rewritten query, nothing else.
+
+  # Answer Generation Prompt
+  # Purpose: Generate answers based on retrieved document chunks
+  # Variables: {query}, {retrieved_chunks}
+  answer_generation_prompt: |
+    You are a helpful assistant that answers questions based on the provided document excerpts.
+
+    User question: {{ query }}
+
+    Relevant document excerpts:
+    {% for chunk in retrieved_chunks %}
+    [Document: {{ chunk.document_name }}]
+    {{ chunk.content }}
+
+    {% endfor %}
+
+    Instructions:
+    1. Answer the question using ONLY the information from the provided excerpts
+    2. If the excerpts don't contain enough information, say so clearly
+    3. Cite the source documents in your answer using the document names
+    4. Be accurate and concise
+    5. Use the same language as the question (Chinese or English)
+    6. Format your answer clearly with paragraphs or bullet points as appropriate
+
+    Answer:
+
+  # Strict Answer Generation Prompt (for regeneration)
+  # Purpose: Generate answers with strict adherence to retrieved content
+  # Variables: {query}, {retrieved_chunks}
+  answer_generation_strict_prompt: |
+    You are a helpful assistant that answers questions STRICTLY based on the provided document excerpts.
+
+    User question: {{ query }}
+
+    Relevant document excerpts:
+    {% for chunk in retrieved_chunks %}
+    [Document: {{ chunk.document_name }}]
+    {{ chunk.content }}
+
+    {% endfor %}
+
+    CRITICAL INSTRUCTIONS:
+    1. Answer the question using ONLY the information from the provided excerpts
+    2. If the answer is NOT in the excerpts, say: "抱歉，根据提供的文档信息，我无法回答这个问题。"
+    3. Do NOT add any information from your training data
+    4. Do NOT make assumptions or inferences beyond the excerpts
+    5. Cite the source documents explicitly for each factual claim
+    6. If unsure, express uncertainty rather than guessing
+
+    Answer:
+
+  # Hallucination Detection Prompt (LLM-based method, alternative to similarity)
+  # Purpose: Verify that generated answers are based on retrieved content
+  # Variables: {generated_answer}, {retrieved_chunks}
+  hallucination_check_prompt: |
+    You are a fact-checking assistant. Your task is to verify if the generated answer is supported by the retrieved document excerpts.
+
+    Generated answer to verify:
+    {{ generated_answer }}
+
+    Retrieved document excerpts:
+    {% for chunk in retrieved_chunks %}
+    [{{ chunk.document_name }}]
+    {{ chunk.content }}
+
+    {% endfor %}
+
+    Instructions:
+    1. Check each factual claim in the generated answer
+    2. Verify that each claim is supported by the retrieved excerpts
+    3. Flag any claims that are NOT supported or contradict the excerpts
+    4. Return your assessment as JSON:
+       {
+         "passed": true/false,
+         "confidence": 0.0-1.0,
+         "flagged_claims": ["claim1", "claim2", ...]
+       }
+
+    Assessment:
+
+# Prompt Configuration
+config:
+  # Default model to use if not specified in QAConfig
+  default_model: "gpt-3.5-turbo"
+
+  # Temperature settings
+  query_rewrite_temperature: 0.3  # Lower for more deterministic rewrites
+  answer_generation_temperature: 0.7  # Higher for more natural answers
+  strict_generation_temperature: 0.1  # Very low for strict adherence
+  hallucination_check_temperature: 0.2  # Low for consistent verification
+
+  # Max tokens settings
+  query_rewrite_max_tokens: 200
+  answer_generation_max_tokens: 1500
+  strict_generation_max_tokens: 1000
+  hallucination_check_max_tokens: 500
