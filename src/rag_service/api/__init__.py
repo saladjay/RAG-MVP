@@ -1,10 +1,6 @@
 """
 API package - HTTP interface layer.
 
-This package provides the HTTP API endpoints using FastAPI.
-All routes use capability interfaces ONLY, never direct component access.
+Routes are registered directly in main.py, not via package-level imports,
+to avoid circular dependencies with capabilities and pipeline modules.
 """
-
-from rag_service.api.routes import router
-
-__all__ = ["router"]

@@ -4,7 +4,7 @@ FastAPI application entry point for RAG Service.
 This module creates and configures the FastAPI application with
 lifecycle management, middleware, and capability registration.
 
-Architecture (3 Capabilities):
+Architecture (3 Unified Capabilities):
 - QueryCapability: Unified query pipeline with strategy switching
 - ManagementCapability: Document management and model discovery
 - TraceCapability: Health checks and trace observation
@@ -17,30 +17,15 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from rag_service.api.routes import router
-from rag_service.api.qa_routes import router as qa_router
-from rag_service.api.kb_upload_routes import router as kb_upload_router
 from rag_service.api.unified_routes import router as unified_router
 from rag_service.capabilities.base import get_capability_registry
-# Unified capabilities (new)
 from rag_service.capabilities.query_capability import QueryCapability
 from rag_service.capabilities.management_capability import ManagementCapability
 from rag_service.capabilities.trace_capability import TraceCapability
-# Legacy capabilities kept for backward-compat during transition
-from rag_service.capabilities.external_kb_query import ExternalKBQueryCapability
-from rag_service.capabilities.health_check import HealthCheckCapability
-from rag_service.capabilities.knowledge_query import KnowledgeQueryCapability
-from rag_service.capabilities.model_discovery import ModelDiscoveryCapability
-from rag_service.capabilities.model_inference import ModelInferenceCapability
-from rag_service.capabilities.trace_observation import TraceObservationCapability
-from rag_service.capabilities.document_management import DocumentManagementCapability
-from rag_service.capabilities.milvus_kb_upload import MilvusKBUploadCapability
-from rag_service.capabilities.query_quality import QueryQualityCapability
-from rag_service.capabilities.conversational_query import ConversationalQueryCapability
 from rag_service.config import get_settings
 from rag_service.core.logger import get_logger, set_trace_id
-from rag_service.services.session_store import SessionStoreService, get_session_store
-from rag_service.services.belief_state_store import BeliefStateStoreService, get_belief_state_store
+from rag_service.services.session_store import SessionStoreService
+from rag_service.services.belief_state_store import BeliefStateStoreService
 
 
 # Module logger
@@ -53,11 +38,9 @@ _redis_client: Optional[any] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """
-    Application lifespan context manager.
+    """Application lifespan — startup and shutdown.
 
-    Handles startup and shutdown events for the FastAPI application.
-    Registers 3 unified capabilities plus legacy capabilities for transition.
+    Registers 3 unified capabilities, initializes Redis for session stores.
     """
     global _redis_client
 
@@ -112,18 +95,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     registry.register(ManagementCapability())
     registry.register(TraceCapability())
 
-    # Register legacy capabilities (for backward-compat during transition)
-    registry.register(HealthCheckCapability(capabilities=registry._capabilities))
-    registry.register(KnowledgeQueryCapability(milvus_client=None))
-    registry.register(ExternalKBQueryCapability())
-    registry.register(ModelInferenceCapability(litellm_client=None))
-    registry.register(TraceObservationCapability(trace_manager=None))
-    registry.register(DocumentManagementCapability(knowledge_base=None))
-    registry.register(ModelDiscoveryCapability(litellm_client=None))
-    registry.register(MilvusKBUploadCapability())
-    registry.register(QueryQualityCapability(config=settings.query_quality))
-    registry.register(ConversationalQueryCapability(config=settings.conversational_query))
-
     logger.info(f"Registered capabilities: {registry.list_capabilities()}")
 
     yield
@@ -140,8 +111,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 def create_app() -> FastAPI:
-    """
-    Create and configure the FastAPI application.
+    """Create and configure the FastAPI application.
 
     Returns:
         Configured FastAPI application instance.
@@ -205,11 +175,8 @@ def create_app() -> FastAPI:
             },
         )
 
-    # Include routes — unified first, then legacy (with deprecation headers)
+    # Include routes
     app.include_router(unified_router, prefix="/api/v1")
-    app.include_router(router)
-    app.include_router(qa_router)
-    app.include_router(kb_upload_router)
 
     # Root endpoint
     @app.get("/")
