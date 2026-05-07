@@ -1,8 +1,12 @@
-# OA Component Development Guidelines
+﻿# OA Component Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-01
+Auto-generated from all feature plans. Last updated: 2026-05-07
 
 ## Active Technologies
+- Python 3.11+ + FastAPI, LiteLLM, Pydantic, Pydantic Settings, Phidata, Langfuse SDK, Milvus, httpx (008-rag-architecture-refactor)
+- Milvus (vector DB), Redis (session state) (008-rag-architecture-refactor)
+- Python 3.11+ + FastAPI, Pydantic, Pydantic Settings, typing.Protocol (stdlib) (009-atomic-pipeline)
+- Redis (sessions/belief state), Milvus (vector search) — existing, unchanged (009-atomic-pipeline)
 
 ### Languages
 - Python 3.11+ (primary language across all services)
@@ -273,49 +277,83 @@ class PromptRetrievalService:
 - Never block the event loop (no sync I/O in async functions)
 
 ## Recent Changes
+- 009-atomic-pipeline: Added Python 3.11+ + FastAPI, Pydantic, Pydantic Settings, typing.Protocol (stdlib)
+- 008-rag-architecture-refactor: Added Python 3.11+ + FastAPI, LiteLLM, Pydantic, Pydantic Settings, Phidata, Langfuse SDK, Milvus, httpx
 
 ### Feature 005: RAG QA Pipeline (2026-04-01)
 Added complete question-answering pipeline to RAG Service. Introduces:
 - Query rewriting capability for improved retrieval
-- External knowledge base integration with fallback responses
-- Answer generation with source citations
-- Similarity-based hallucination detection
-- Streaming response support with async verification
-- Default fallback messages for KB errors
 
 ### Feature 004: UV Python Install (2026-03-20)
 Added CLI tool for Python runtime management using uv. Introduces:
-- Typer-based CLI framework
-- Integration with python.org and GitHub APIs
-- Version detection from project files
-- User-space Python installation
 
 ### Feature 001: RAG Service MVP (2026-03-20)
 Added RAG service with three-layer observability. Introduces:
-- Capability interface layer architecture pattern
-- LiteLLM gateway for multi-provider access
-- Phidata agent orchestration
-- Milvus vector database integration
-- Langfuse prompt management and tracing
-- Unified trace_id propagation across layers
 
 ### Feature 003: Prompt Service (2026-03-23)
 Added prompt management middleware service. Introduces:
-- Prompt retrieval without direct Langfuse dependency
-- A/B testing with deterministic hash-based routing
-- Online prompt editing without deployment
-- Trace analysis and insights
-- Python SDK for business code integration
-- Jinja2 template rendering for prompts
 
 ### Feature 002: E2E Test Framework (2026-03-30)
 Added E2E testing framework for validating RAG Service responses. Introduces:
-- Multi-format test file support (JSON/CSV/YAML/Markdown)
-- Async test execution with httpx
-- Similarity calculation using Levenshtein distance
-- Rich console output and JSON report generation
-- Source document validation
-- Configurable thresholds and retry logic
 
 <!-- MANUAL ADDITIONS START -->
+
+## Architecture Review (2026-05-07)
+
+### 问题：MVP 单体膨胀
+
+当前 `rag_service` 将 001/005/006/007 四个 feature 的代码混在一起：
+- `config.py` 941 行，15 个 Config 类
+- `capabilities/` 13+ 个 Capability（spec 001 仅设计 7 个）
+- 3 套推理网关（LiteLLM / HTTP Cloud / GLM）并列暴露，违反设计意图
+- QueryQuality 和 ConversationalQuery 功能高度重叠
+
+### 设计原则
+
+> **Capability 的粒度应对齐调用者意图，而非实现者分工。**
+
+- Capability 是面向**调用者**的抽象（"我问个问题"），不是面向**实现**的拆分（"我调 Milvus"还是"我调 ExternalKB"）
+- 多个实现（Milvus / ExternalKB）应在 Capability **内部**用策略模式切换，不应拆成多个 Capability
+- LiteLLM 是唯一的推理入口，HTTP Cloud / GLM 是 LiteLLM 内部的 provider 实现，不应作为独立 Gateway 暴露给调用方
+- 006/007 的功能（QueryQuality、ConversationalQuery）是 QueryCapability 内部的策略，不是独立 Capability
+
+### 目标架构
+
+```
+API Layer (4 端点)
+  ├── POST /query
+  ├── GET /models
+  ├── GET /traces/{id}
+  └── GET /health
+
+Capability Layer (3 个)
+  ├── QueryCapability        (检索 + 推理 + 回答, 内部策略切换)
+  ├── ManagementCapability   (文档增删改查)
+  └── TraceCapability        (追踪查询)
+
+Infrastructure (1 套)
+  ├── Gateway   (LiteLLM 唯一入口, HTTP Cloud/GLM 是内部 provider)
+  ├── Store     (统一存储, milvus/external_kb 策略切换)
+  └── Observer  (统一观测, litellm + phidata + langfuse)
+```
+
+### Gateway 设计意图澄清
+
+```
+设计意图（正确）:
+  调用者 → LiteLLM（唯一门面）→ 内部路由 → Ollama / OpenAI / Claude / GLM / HTTP Cloud
+                                       ↑
+                                  GLM 和 HTTP Cloud 是 LiteLLM 的内部实现细节，
+                                  不是并列的 Gateway，不暴露给 RAG 或其他模块。
+
+当前代码（错误）:
+  调用者 → default_gateway="litellm" → LiteLLMGateway
+  调用者 → default_gateway="http"    → HTTPCompletionGateway
+  调用者 → default_gateway="glm"     → GLMGateway
+  ↑ 三个 Gateway 并列，调用者需要知道用哪个
+```
+
+### 详细分析
+
+参见 `docs/compliance-check-report.md` 和 `docs/architecture.md`
 <!-- MANUAL ADDITIONS END -->

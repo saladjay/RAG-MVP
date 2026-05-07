@@ -34,7 +34,11 @@ from rag_service.capabilities.query_rewrite import (
     QueryRewriteCapability,
     QueryRewriteInput,
 )
-from rag_service.core.exceptions import GenerationError, RetrievalError
+from rag_service.capabilities.query_quality import (
+    QueryQualityCapability,
+    QueryQualityInput,
+)
+from rag_service.core.exceptions import GenerationError, RetrievalError, QueryQualityPromptRequired
 from rag_service.core.logger import get_logger
 from rag_service.config import get_settings
 from rag_service.utils.chain_logger import get_chain_logger
@@ -71,6 +75,11 @@ class QAPipelineMetadata(BaseModel):
     retrieval_count: int = Field(..., description="Number of chunks retrieved")
     generation_model: str = Field(..., description="Model used for generation")
     timing: QATiming = Field(..., description="Timing breakdown")
+    # Query quality enhancement fields
+    quality_enhanced: bool = Field(default=False, description="Whether query was quality enhanced")
+    quality_score: float = Field(default=0.0, description="Query quality score (0.0-1.0)")
+    session_id: Optional[str] = Field(default=None, description="Session ID for multi-turn conversations")
+    dimension_feedback: Optional[str] = Field(default=None, description="Quality feedback from dimension analysis")
 
 
 class QAPipelineOutput(CapabilityOutput):
@@ -106,6 +115,7 @@ class QAPipelineCapability(Capability[QAPipelineInput, QAPipelineOutput]):
         external_kb_capability: Optional[ExternalKBQueryCapability] = None,
         model_inference_capability: Optional[ModelInferenceCapability] = None,
         query_rewrite_capability: Optional[QueryRewriteCapability] = None,
+        query_quality_capability: Optional[QueryQualityCapability] = None,
         hallucination_detector: Optional[Any] = None,
         fallback_service: Optional[Any] = None,
     ) -> None:
@@ -116,6 +126,7 @@ class QAPipelineCapability(Capability[QAPipelineInput, QAPipelineOutput]):
             external_kb_capability: External KB query capability.
             model_inference_capability: Model inference capability.
             query_rewrite_capability: Query rewrite capability.
+            query_quality_capability: Query quality enhancement capability.
             hallucination_detector: Hallucination detection capability.
             fallback_service: Default fallback service.
         """
@@ -123,6 +134,7 @@ class QAPipelineCapability(Capability[QAPipelineInput, QAPipelineOutput]):
         self._external_kb_capability = external_kb_capability or ExternalKBQueryCapability()
         self._model_inference_capability = model_inference_capability
         self._query_rewrite_capability = query_rewrite_capability
+        self._query_quality_capability = query_quality_capability
         self._hallucination_detector = hallucination_detector
         self._fallback_service = fallback_service
         self._prompt_client = None  # Will be initialized lazily
@@ -170,21 +182,100 @@ class QAPipelineCapability(Capability[QAPipelineInput, QAPipelineOutput]):
 
         # Initialize timing
         timing_data = {
+            "quality_ms": None,
             "rewrite_ms": None,
             "retrieve_ms": 0,
             "generate_ms": 0,
             "verify_ms": None,
         }
 
-        # Step 0: Query rewriting (if enabled)
-        final_query = input_data.query
+        # Step 0: Query Quality Enhancement (if enabled)
+        session_id = None
+        quality_score = 0.0
+        dimension_feedback = None
+
+        if options.enable_query_quality:
+            logger.info(
+                "QA Pipeline: Starting query quality enhancement",
+                extra={"trace_id": trace_id, "original_query": input_data.query[:100]},
+            )
+
+            quality_start = time.time()
+
+            try:
+                # Initialize query quality capability if not already done
+                if self._query_quality_capability is None:
+                    self._query_quality_capability = QueryQualityCapability()
+
+                quality_input = QueryQualityInput(
+                    query=input_data.query,
+                    company_id=context.company_id,
+                    session_id=None,  # First query has no session
+                    enable_auto_enrich=True,
+                    require_all_dimensions=False,
+                    trace_id=trace_id,
+                )
+                quality_result = await self._query_quality_capability.execute(quality_input)
+
+                timing_data["quality_ms"] = (time.time() - quality_start) * 1000
+                session_id = quality_result.session_id
+                quality_score = quality_result.quality_score
+                dimension_feedback = quality_result.feedback
+
+                # Handle prompt action - need more information from user
+                if quality_result.action == "prompt":
+                    logger.info(
+                        "QA Pipeline: Query quality enhancement requires more info",
+                        extra={
+                            "trace_id": trace_id,
+                            "quality_score": quality_score,
+                            "prompt_text": quality_result.prompt_text,
+                        },
+                    )
+
+                    # Raise QueryQualityPromptRequired exception with all necessary info
+                    raise QueryQualityPromptRequired(
+                        prompt_text=quality_result.prompt_text or "请提供更多信息以便更准确地查找文档。",
+                        session_id=session_id,
+                        quality_score=quality_score,
+                        dimensions={k: v.model_dump() for k, v in quality_result.dimensions.items()},
+                        feedback=quality_result.feedback,
+                    )
+
+                # Use enriched query if available
+                final_query = quality_result.enriched_query or input_data.query
+
+                logger.info(
+                    "QA Pipeline: Query quality enhancement completed",
+                    extra={
+                        "trace_id": trace_id,
+                        "quality_score": quality_score,
+                        "session_id": session_id,
+                        "final_query": final_query[:100],
+                    },
+                )
+
+            except RetrievalError as e:
+                # Re-raise RetrievalError for prompt handling
+                raise
+            except Exception as e:
+                logger.warning(
+                    "QA Pipeline: Query quality enhancement failed, using original query",
+                    extra={"trace_id": trace_id, "error": str(e)},
+                )
+                # Continue with original query on failure
+                final_query = input_data.query
+        else:
+            final_query = input_data.query
+
+        # Step 1: Query rewriting (if enabled)
         query_rewritten = False
         rewrite_reason = None
 
         if options.enable_query_rewrite:
             logger.info(
                 "QA Pipeline: Starting query rewriting",
-                extra={"trace_id": trace_id, "original_query": input_data.query[:100]},
+                extra={"trace_id": trace_id, "original_query": final_query[:100]},
             )
 
             rewrite_start = time.time()
@@ -201,7 +292,7 @@ class QAPipelineCapability(Capability[QAPipelineInput, QAPipelineOutput]):
                         self._query_rewrite_capability = QueryRewriteCapability()
 
                 rewrite_input = QueryRewriteInput(
-                    original_query=input_data.query,
+                    original_query=final_query,
                     context=context,
                     trace_id=trace_id,
                 )
@@ -239,8 +330,7 @@ class QAPipelineCapability(Capability[QAPipelineInput, QAPipelineOutput]):
                     "QA Pipeline: Query rewriting failed, using original query",
                     extra={"trace_id": trace_id, "error": str(e)},
                 )
-                # Continue with original query on failure
-                final_query = input_data.query
+                # Continue with enriched query on failure
                 query_rewritten = False
 
         # Step 1: Knowledge base retrieval
@@ -544,6 +634,10 @@ class QAPipelineCapability(Capability[QAPipelineInput, QAPipelineOutput]):
             retrieval_count=retrieval_count,
             generation_model=generation_model,
             timing=timing,
+            quality_enhanced=options.enable_query_quality and quality_score > 0,
+            quality_score=quality_score,
+            session_id=session_id,
+            dimension_feedback=dimension_feedback,
         )
 
         # End chain logging

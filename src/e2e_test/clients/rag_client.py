@@ -20,8 +20,8 @@ class RAGClient:
     Provides async methods for querying the RAG Service and checking health.
     """
 
-    DEFAULT_QUERY_ENDPOINT = "/api/v1/ai/agent"
-    DEFAULT_HEALTH_ENDPOINT = "/health"
+    DEFAULT_QUERY_ENDPOINT = "/api/v1/query"
+    DEFAULT_HEALTH_ENDPOINT = "/api/v1/health"
 
     def __init__(
         self,
@@ -86,8 +86,7 @@ class RAGClient:
             trace_id = f"e2e-test-{uuid.uuid4()}"
 
         payload = {
-            "question": question,
-            "trace_id": trace_id
+            "query": question,
         }
 
         self.logger.debug(

@@ -1,10 +1,20 @@
 """
 Inference Gateways for RAG Service.
 
-This module provides unified model inference via multiple backends:
-- LiteLLMGateway: Multi-provider model access via LiteLLM
-- HTTPCompletionGateway: Direct HTTP calls to cloud APIs
-- HTTPEmbeddingGateway: Direct HTTP calls to embedding APIs
+This module provides unified model inference via LiteLLM as the sole entry point.
+HTTP Cloud and GLM are internal provider implementations within LiteLLMGateway,
+not separate Gateways that callers must choose between.
+
+Gateways (all accessed via get_gateway()):
+- LiteLLMGateway: Unified inference gateway with internal provider routing
+  - Standard LiteLLM providers (OpenAI, Anthropic, Ollama, etc.)
+  - Internal cloud_http provider (HTTPCompletionGateway)
+  - Internal glm provider (GLMCompletionGateway)
+  - Internal embedding (HTTPEmbeddingGateway)
+
+Configuration:
+- LITELLM_PROVIDER: "openai" | "cloud_http" | "glm" (default: "openai")
+- Old DEFAULT_GATEWAY env var is mapped automatically
 
 API Reference:
 - Location: src/rag_service/inference/gateway.py
@@ -121,6 +131,7 @@ class LiteLLMGateway:
         config_path: Optional[str] = None,
         default_model: str = "gpt-3.5-turbo",
         fallback_models: Optional[List[str]] = None,
+        provider: Optional[str] = None,
     ):
         """Initialize the LiteLLM gateway.
 
@@ -128,6 +139,8 @@ class LiteLLMGateway:
             config_path: Optional path to litellm config YAML file
             default_model: Default model identifier
             fallback_models: Ordered list of fallback models
+            provider: Internal provider to route to ("openai", "cloud_http", "glm").
+                      If None, uses LiteLLM's standard routing.
         """
         self.config_path = config_path
         self.default_model = default_model
@@ -135,6 +148,12 @@ class LiteLLMGateway:
             "gpt-3.5-turbo",
             "claude-3-haiku",
         ]
+        self._provider = provider or "openai"
+
+        # Internal provider instances (lazy-initialized)
+        self._http_gateway: Optional['HTTPCompletionGateway'] = None
+        self._glm_gateway: Optional['GLMCompletionGateway'] = None
+        self._embedding_gateway: Optional['HTTPEmbeddingGateway'] = None
 
         # Initialize models from config or defaults
         self.models: Dict[str, ModelConfig] = {}
@@ -144,6 +163,7 @@ class LiteLLMGateway:
             "Initialized LiteLLM gateway",
             extra={
                 "default_model": default_model,
+                "provider": self._provider,
                 "models_count": len(self.models),
             },
         )
@@ -338,6 +358,164 @@ class LiteLLMGateway:
                 providers.add(model.provider)
 
         return sorted(list(providers))
+
+    # ----------------------------------------------------------------
+    # Internal provider routing
+    # ----------------------------------------------------------------
+
+    @property
+    def provider(self) -> str:
+        """Get the active internal provider name."""
+        return self._provider
+
+    def _get_http_gateway(self) -> 'HTTPCompletionGateway':
+        """Get or create the internal HTTP Cloud provider."""
+        if self._http_gateway is None:
+            from rag_service.config import get_settings
+            settings = get_settings()
+            p = settings.litellm.cloud_http
+            if p is None:
+                raise RuntimeError("Cloud HTTP provider not configured")
+            self._http_gateway = HTTPCompletionGateway(
+                url=p.url,
+                model=p.model,
+                timeout=p.timeout,
+                auth_token=p.auth_token,
+                max_retries=p.max_retries,
+                retry_delay=p.retry_delay,
+            )
+        return self._http_gateway
+
+    def _get_glm_gateway(self) -> 'GLMCompletionGateway':
+        """Get or create the internal GLM provider."""
+        if self._glm_gateway is None:
+            from rag_service.config import get_settings
+            settings = get_settings()
+            p = settings.litellm.glm
+            if p is None:
+                raise RuntimeError("GLM provider not configured")
+            self._glm_gateway = GLMCompletionGateway(
+                url=p.url,
+                model=p.model,
+                timeout=p.timeout,
+                api_key=p.api_key,
+                max_retries=p.max_retries,
+                retry_delay=p.retry_delay,
+                enable_thinking=p.enable_thinking,
+            )
+        return self._glm_gateway
+
+    async def _get_embedding_gateway(self) -> 'HTTPEmbeddingGateway':
+        """Get or create the internal embedding provider."""
+        if self._embedding_gateway is None:
+            from rag_service.config import get_settings
+            settings = get_settings()
+            self._embedding_gateway = HTTPEmbeddingGateway(
+                url=settings.litellm.embedding_url,
+                model=settings.litellm.embedding_model,
+                timeout=settings.litellm.embedding_timeout,
+                auth_token=settings.litellm.embedding_auth_token,
+            )
+        return self._embedding_gateway
+
+    def complete_routed(
+        self,
+        prompt: str,
+        model_hint: Optional[str] = None,
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+        **kwargs,
+    ) -> CompletionResult:
+        """Route completion to the configured internal provider.
+
+        This is the unified entry point that selects between LiteLLM,
+        HTTP Cloud, and GLM based on the provider configuration.
+        Callers never specify a provider — it's config-driven.
+
+        Args:
+            prompt: Input prompt
+            model_hint: Optional model hint
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            **kwargs: Additional model parameters
+
+        Returns:
+            CompletionResult with generated text and metadata
+        """
+        if self._provider == "cloud_http":
+            gateway = self._get_http_gateway()
+            return gateway.complete(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                **kwargs,
+            )
+        elif self._provider == "glm":
+            gateway = self._get_glm_gateway()
+            return gateway.complete(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                **kwargs,
+            )
+        else:
+            # Standard LiteLLM routing
+            return self.complete(
+                prompt=prompt,
+                model_hint=model_hint,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                **kwargs,
+            )
+
+    async def acomplete_routed(
+        self,
+        prompt: str,
+        model_hint: Optional[str] = None,
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+        **kwargs,
+    ) -> CompletionResult:
+        """Async version of complete_routed.
+
+        Routes to the configured provider asynchronously.
+        """
+        if self._provider == "cloud_http":
+            gateway = self._get_http_gateway()
+            return await gateway.acomplete(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                **kwargs,
+            )
+        elif self._provider == "glm":
+            gateway = self._get_glm_gateway()
+            return await gateway.acomplete(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                **kwargs,
+            )
+        else:
+            return await self.acomplete(
+                prompt=prompt,
+                model_hint=model_hint,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                **kwargs,
+            )
+
+    async def embed(self, text: str) -> 'EmbeddingResult':
+        """Generate embedding via the internal embedding provider.
+
+        Args:
+            text: Text to embed.
+
+        Returns:
+            EmbeddingResult with vector and metadata.
+        """
+        gateway = await self._get_embedding_gateway()
+        return await gateway.embed(text)
 
 
     def _estimate_cost(
@@ -621,24 +799,40 @@ _gateway_lock = asyncio.Lock()
 async def get_gateway() -> LiteLLMGateway:
     """Get or create the global gateway singleton.
 
+    The gateway is configured with the active provider from settings.
+    LITELLM_PROVIDER (or legacy DEFAULT_GATEWAY) determines which internal
+    provider to use. Callers never specify a provider.
+
     Returns:
-        The global LiteLLMGateway instance
+        The global LiteLLMGateway instance configured with the active provider.
     """
     global _gateway
 
     async with _gateway_lock:
         if _gateway is None:
-            # Read configuration from environment
             import os
 
             config_path = os.getenv("LITELLM_CONFIG_PATH")
             default_model = os.getenv("DEFAULT_MODEL", "gpt-3.5-turbo")
 
+            # Determine provider from new or legacy config
+            try:
+                from rag_service.config import get_settings
+                settings = get_settings()
+                provider = settings.litellm.provider
+                default_model = settings.litellm.model or default_model
+            except Exception:
+                provider = "openai"
+
             _gateway = LiteLLMGateway(
                 config_path=config_path,
                 default_model=default_model,
+                provider=provider,
             )
-            logger.info("Initialized global LiteLLM gateway")
+            logger.info(
+                "Initialized global LiteLLM gateway",
+                extra={"provider": provider, "default_model": default_model},
+            )
 
     return _gateway
 
@@ -1063,32 +1257,14 @@ _http_gateway_lock = asyncio.Lock()
 async def get_http_gateway() -> HTTPCompletionGateway:
     """Get or create the global HTTP gateway singleton.
 
+    DEPRECATED: Use get_gateway() instead. HTTP Cloud is now an internal
+    provider within LiteLLMGateway.
+
     Returns:
-        The global HTTPCompletionGateway instance
+        The HTTPCompletionGateway instance (via LiteLLMGateway internals).
     """
-    global _http_gateway
-
-    async with _http_gateway_lock:
-        if _http_gateway is None:
-            # Read from settings
-            from rag_service.config import get_settings
-
-            settings = get_settings()
-
-            if not settings.cloud_completion.enabled:
-                logger.warning("Cloud completion is not configured")
-
-            _http_gateway = HTTPCompletionGateway(
-                url=settings.cloud_completion.url,
-                model=settings.cloud_completion.model,
-                timeout=settings.cloud_completion.timeout,
-                auth_token=settings.cloud_completion.auth_token,
-                max_retries=settings.cloud_completion.max_retries,
-                retry_delay=settings.cloud_completion.retry_delay,
-            )
-            logger.info("Initialized global HTTP completion gateway")
-
-    return _http_gateway
+    gateway = await get_gateway()
+    return gateway._get_http_gateway()
 
 
 def reset_http_gateway() -> None:
@@ -1335,33 +1511,14 @@ _glm_gateway_lock = asyncio.Lock()
 async def get_glm_gateway() -> GLMCompletionGateway:
     """Get or create the global GLM gateway singleton.
 
+    DEPRECATED: Use get_gateway() instead. GLM is now an internal
+    provider within LiteLLMGateway.
+
     Returns:
-        The global GLMCompletionGateway instance
+        The GLMCompletionGateway instance (via LiteLLMGateway internals).
     """
-    global _glm_gateway
-
-    async with _glm_gateway_lock:
-        if _glm_gateway is None:
-            # Read from settings
-            from rag_service.config import get_settings
-
-            settings = get_settings()
-
-            if not settings.glm.enabled:
-                logger.warning("GLM is not configured")
-
-            _glm_gateway = GLMCompletionGateway(
-                url=settings.glm.url,
-                model=settings.glm.model,
-                timeout=settings.glm.timeout,
-                api_key=settings.glm.api_key,
-                max_retries=settings.glm.max_retries,
-                retry_delay=settings.glm.retry_delay,
-                enable_thinking=settings.glm.enable_thinking,
-            )
-            logger.info("Initialized global GLM completion gateway")
-
-    return _glm_gateway
+    gateway = await get_gateway()
+    return gateway._get_glm_gateway()
 
 
 def reset_glm_gateway() -> None:

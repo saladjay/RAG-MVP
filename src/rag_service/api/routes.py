@@ -11,7 +11,7 @@ import asyncio
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 
 from rag_service.api.schemas import (
@@ -52,8 +52,17 @@ from rag_service.core.logger import get_logger
 # Module logger
 logger = get_logger(__name__)
 
+# Deprecation dependency — adds header to all legacy route responses
+async def _deprecation_header(response: Response):
+    response.headers["Deprecation"] = "true; version=0.2.0"
+
+
 # Create API router
-router = APIRouter(prefix="/api/v1", tags=["v1"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["v1 (deprecated)"],
+    dependencies=[Depends(_deprecation_header)],
+)
 
 
 # ============================================================================

@@ -55,6 +55,12 @@ class QAOptions(BaseModel):
     enable_query_rewrite: Optional[bool] = Field(
         default=True, description="Enable query rewriting"
     )
+    enable_query_quality: Optional[bool] = Field(
+        default=True, description="Enable query quality enhancement (multi-turn dimension gathering)"
+    )
+    enable_conversational_query: Optional[bool] = Field(
+        default=True, description="Enable conversational query enhancement (slot extraction, domain classification)"
+    )
     enable_hallucination_check: Optional[bool] = Field(
         default=True, description="Enable hallucination detection"
     )
@@ -123,6 +129,11 @@ class QAMetadata(BaseModel):
     rewritten_query: Optional[str] = Field(default=None, description="Rewritten query if applicable")
     retrieval_count: int = Field(..., ge=0, description="Number of chunks retrieved")
     timing_ms: QATiming = Field(..., description="Timing breakdown")
+    # Query quality enhancement fields
+    quality_enhanced: bool = Field(default=False, description="Whether query was quality enhanced")
+    quality_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Query quality score (0.0-1.0)")
+    session_id: Optional[str] = Field(default=None, description="Session ID for multi-turn conversations")
+    dimension_feedback: Optional[str] = Field(default=None, description="Quality feedback from dimension analysis")
 
 
 class QAQueryResponse(BaseModel):
@@ -146,3 +157,15 @@ class QAErrorResponse(BaseModel):
     detail: Optional[str] = Field(default=None, description="Detailed error information")
     trace_id: str = Field(..., description="Trace ID for debugging")
     is_fallback: bool = Field(default=False, description="Whether fallback response was provided")
+
+
+class QAPromptResponse(BaseModel):
+    """Response when query quality enhancement needs more information."""
+
+    action: str = Field(default="prompt", description="Action required: prompt")
+    prompt_text: str = Field(..., description="Prompt text to display to user")
+    session_id: str = Field(..., description="Session ID for multi-turn conversation")
+    quality_score: float = Field(..., ge=0.0, le=1.0, description="Current query quality score")
+    trace_id: str = Field(..., description="Trace ID for debugging")
+    dimensions: Optional[Dict[str, Any]] = Field(default=None, description="Current dimension states")
+    feedback: Optional[str] = Field(default=None, description="Quality feedback message")

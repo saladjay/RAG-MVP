@@ -7,13 +7,14 @@ including query processing, streaming responses, and health checks.
 
 from typing import Dict, Any
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from rag_service.api.qa_schemas import (
     QAQueryRequest,
     QAQueryResponse,
     QAErrorResponse,
+    QAPromptResponse,
     FallbackErrorType,
     QAMetadata,
 )
@@ -25,15 +26,24 @@ from rag_service.capabilities.qa_pipeline import (
 from rag_service.capabilities.model_inference import ModelInferenceCapability
 from rag_service.capabilities.external_kb_query import ExternalKBQueryCapability
 from rag_service.config import get_settings
-from rag_service.core.exceptions import GenerationError, RetrievalError
+from rag_service.core.exceptions import GenerationError, RetrievalError, QueryQualityPromptRequired
 from rag_service.core.logger import get_logger
 
 
 # Module logger
 logger = get_logger(__name__)
 
+# Deprecation dependency — adds header to all legacy QA route responses
+async def _deprecation_header(response: Response):
+    response.headers["Deprecation"] = "true; version=0.2.0"
+
+
 # Create router
-router = APIRouter(prefix="/qa", tags=["QA"])
+router = APIRouter(
+    prefix="/qa",
+    tags=["QA (deprecated)"],
+    dependencies=[Depends(_deprecation_header)],
+)
 
 # Global capability instance (will be initialized on startup)
 _qa_capability: QAPipelineCapability = None
@@ -143,6 +153,10 @@ async def qa_query(
             rewritten_query=result.pipeline_metadata.rewritten_query,
             retrieval_count=result.pipeline_metadata.retrieval_count,
             timing_ms=result.pipeline_metadata.timing,
+            quality_enhanced=result.pipeline_metadata.quality_enhanced,
+            quality_score=result.pipeline_metadata.quality_score,
+            session_id=result.pipeline_metadata.session_id,
+            dimension_feedback=result.pipeline_metadata.dimension_feedback,
         )
 
         # Return response
@@ -155,6 +169,31 @@ async def qa_query(
 
     except HTTPException:
         raise
+
+    except QueryQualityPromptRequired as e:
+        # Handle query quality prompt - return JSON response with prompt info
+        logger.info(
+            "QA query requires more information (quality prompt)",
+            extra={
+                "trace_id": trace_id,
+                "session_id": e.session_id,
+                "quality_score": e.quality_score,
+                "prompt_text": e.prompt_text,
+            },
+        )
+        # Return a prompt response with 200 status code
+        return JSONResponse(
+            status_code=200,
+            content={
+                "action": "prompt",
+                "prompt_text": e.prompt_text,
+                "session_id": e.session_id,
+                "quality_score": e.quality_score,
+                "trace_id": trace_id,
+                "dimensions": e.dimensions,
+                "feedback": e.feedback,
+            },
+        )
 
     except RetrievalError as e:
         logger.error(

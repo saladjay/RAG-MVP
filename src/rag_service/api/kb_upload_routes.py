@@ -9,7 +9,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_validator
 
 from rag_service.capabilities.milvus_kb_upload import (
@@ -25,8 +25,17 @@ from rag_service.core.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Deprecation dependency — adds header to all legacy KB route responses
+async def _deprecation_header(response: Response):
+    response.headers["Deprecation"] = "true; version=0.2.0"
+
+
 # Create router
-router = APIRouter(prefix="/kb", tags=["Knowledge Base"])
+router = APIRouter(
+    prefix="/kb",
+    tags=["Knowledge Base (deprecated)"],
+    dependencies=[Depends(_deprecation_header)],
+)
 
 # Global capability instance (will be initialized on startup)
 _upload_capability: Optional[MilvusKBUploadCapability] = None

@@ -183,6 +183,41 @@ class EmbeddingError(KnowledgeBaseError):
         super().__init__(f"Embedding generation failed: {message}", detail)
 
 
+class QueryQualityPromptRequired(KnowledgeBaseError):
+    """Exception raised when query quality enhancement needs more information from the user.
+
+    This exception carries the session_id and quality_score so the API can return
+    a proper prompt response to the user for multi-turn conversation.
+    """
+
+    def __init__(
+        self,
+        prompt_text: str,
+        session_id: str,
+        quality_score: float,
+        dimensions: Optional[dict] = None,
+        feedback: Optional[str] = None,
+        detail: Optional[str] = None,
+    ) -> None:
+        """Initialize QueryQualityPromptRequired.
+
+        Args:
+            prompt_text: The prompt text to display to the user.
+            session_id: Session ID for multi-turn conversation continuation.
+            quality_score: Current query quality score (0.0-1.0).
+            dimensions: Current dimension states.
+            feedback: Quality feedback message.
+            detail: Additional details about the error.
+        """
+        super().__init__(prompt_text, detail or "query_quality_prompt")
+        self.prompt_text = prompt_text
+        self.session_id = session_id
+        self.quality_score = quality_score
+        self.dimensions = dimensions or {}
+        self.feedback = feedback
+        self.error_code = "QUERY_QUALITY_PROMPT"
+
+
 class RetrievalError(KnowledgeBaseError):
     """Exception raised when knowledge base retrieval fails."""
 
