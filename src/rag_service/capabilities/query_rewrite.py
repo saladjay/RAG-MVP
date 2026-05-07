@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-from rag_service.api.qa_schemas import QAContext
+from rag_service.api.unified_schemas import QueryContext as QAContext
 from rag_service.capabilities.base import (
     Capability,
     CapabilityInput,
