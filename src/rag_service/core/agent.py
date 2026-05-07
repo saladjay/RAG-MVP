@@ -19,6 +19,10 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 
 from rag_service.core.logger import get_logger
+from rag_service.services.prompt_client import (
+    get_prompt_client,
+    TEMPLATE_RAG_AGENT_INSTRUCTIONS,
+)
 
 logger = get_logger(__name__)
 
@@ -220,20 +224,49 @@ class RAGAgent:
         self,
         retrieval_tool: Optional[RetrievalTool] = None,
         inference_tool: Optional[InferenceTool] = None,
-        instructions: str = "You are a helpful AI assistant that answers questions based on retrieved context.",
+        instructions: Optional[str] = None,
+        use_prompt_service: bool = True,
     ):
         """Initialize RAG agent.
 
         Args:
             retrieval_tool: Optional retrieval tool
             inference_tool: Optional inference tool
-            instructions: System instructions for agent behavior
+            instructions: System instructions for agent behavior (deprecated, use Prompt Service)
+            use_prompt_service: Whether to use Prompt Service for instructions
         """
         self.retrieval_tool = retrieval_tool or RetrievalTool()
         self.inference_tool = inference_tool or InferenceTool()
+        self._use_prompt_service = use_prompt_service
+        self._prompt_client = None  # Will be initialized lazily
+
+        # Use provided instructions or None (will use Prompt Service)
         self.instructions = instructions
 
         logger.info("Initialized RAG agent")
+
+    async def _get_prompt_client(self):
+        """Get or create the prompt client."""
+        if self._prompt_client is None:
+            self._prompt_client = await get_prompt_client()
+        return self._prompt_client
+
+    async def get_instructions(self, trace_id: str = "") -> str:
+        """Get agent instructions from Prompt Service.
+
+        Args:
+            trace_id: Request trace identifier
+
+        Returns:
+            Agent instructions string
+        """
+        if self._use_prompt_service:
+            prompt_client = await self._get_prompt_client()
+            return await prompt_client.get_prompt(
+                template_id=TEMPLATE_RAG_AGENT_INSTRUCTIONS,
+                trace_id=trace_id,
+            )
+        return self.instructions or "You are a helpful AI assistant that answers questions based on retrieved context."
 
     async def run(
         self,
@@ -296,7 +329,7 @@ class RAGAgent:
 
         # Step 2: Build prompt with retrieved context
         context_text = self._build_context_prompt(chunks)
-        prompt = self._build_prompt(question, context_text)
+        prompt = await self._build_prompt(question, context_text, trace_id)
 
         # Step 3: Generate answer with context
         inference_result = await self.inference_tool.execute(
@@ -357,17 +390,35 @@ class RAGAgent:
 
         return "\n\n".join(context_parts)
 
-    def _build_prompt(self, question: str, context: str) -> str:
-        """Build full prompt for LLM.
+    async def _build_prompt(self, question: str, context: str, trace_id: str = "") -> str:
+        """Build full prompt for LLM using Prompt Service.
 
         Args:
             question: User question
             context: Retrieved context
+            trace_id: Request trace identifier
 
         Returns:
             Formatted prompt
         """
-        return f"""{self.instructions}
+        # Get instructions from Prompt Service
+        instructions = await self.get_instructions(trace_id)
+
+        # Build prompt with instructions from template
+        if self._use_prompt_service:
+            prompt_client = await self._get_prompt_client()
+            variables = {
+                "context": context,
+                "question": question,
+            }
+            return await prompt_client.get_prompt(
+                template_id=TEMPLATE_RAG_AGENT_INSTRUCTIONS,
+                variables=variables,
+                trace_id=trace_id,
+            )
+
+        # Fallback to original format
+        return f"""{instructions}
 
 [Retrieved Context]
 {context}

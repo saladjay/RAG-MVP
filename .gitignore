@@ -110,3 +110,12 @@ sentence_transformers/
 
 # HuggingFace
 .huggingface/
+
+
+custom_results/
+full_evaluation_results/
+milvus_evaluation_results/
+question_classification_results/
+rag_evaluation_results/
+retrieval_test_results/
+test_custom_output/

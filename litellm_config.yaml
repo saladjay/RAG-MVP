@@ -1,11 +1,12 @@
 # LiteLLM Configuration for RAG Service
 #
 # This configuration enables multi-model inference through the LiteLLM gateway.
-# It supports multiple providers: OpenAI, Anthropic, Ollama, vLLM, SGLang
+# It supports multiple providers: OpenAI, Anthropic, Ollama, vLLM, SGLang, GLM
 #
 # Environment variables:
 # - OPENAI_API_KEY: OpenAI API key for GPT models
 # - ANTHROPIC_API_KEY: Anthropic API key for Claude models
+# - GLM_API_KEY: 智谱AI API key for GLM models
 # - LITELLM_API_KEY: Optional master API key
 #
 # Usage:
@@ -135,12 +136,47 @@ model_list:
       provider: sglang
       context_length: 8192
 
+  # =====================================================================
+  # GLM Models (智谱AI BigModel) - OpenAI Compatible
+  # =====================================================================
+  - model_name: glm-4.5
+    litellm_params:
+      model: openai/glm-4.5
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: ${GLM_API_KEY}
+    tags: ["glm", "zhipu", "premium", "flagship"]
+    metadata:
+      provider: zhipu
+      context_length: 128000
+      supports_function_calling: true
+
+  - model_name: glm-4.5-air
+    litellm_params:
+      model: openai/glm-4.5-air
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: ${GLM_API_KEY}
+    tags: ["glm", "zhipu", "cost-effective", "recommended"]
+    metadata:
+      provider: zhipu
+      context_length: 128000
+      default: true
+
+  - model_name: glm-4-flash
+    litellm_params:
+      model: openai/glm-4-flash
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: ${GLM_API_KEY}
+    tags: ["glm", "zhipu", "fast", "lightweight"]
+    metadata:
+      provider: zhipu
+      context_length: 128000
+
 # =====================================================================
 # Fallback Configuration
 # =====================================================================
 litellm_settings:
   # Fallback order when primary model is unavailable
-  fallback: ["gpt-3.5-turbo", "claude-3-haiku", "ollama/llama3"]
+  fallback: ["glm-4.5-air", "gpt-3.5-turbo", "claude-3-haiku", "ollama/llama3"]
 
   # Retry configuration
   num_retries: 3
@@ -186,3 +222,10 @@ vllm:
 sglang:
   api_base: ${SGLANG_BASE_URL:http://localhost:8000}
   max_tokens: 4096
+
+# GLM settings (智谱AI)
+glm:
+  api_base: ${GLM_API_BASE:https://open.bigmodel.cn/api/paas/v4}
+  api_key: ${GLM_API_KEY}
+  max_tokens: 4096
+  temperature: 0.7

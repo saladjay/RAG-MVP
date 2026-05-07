@@ -3,6 +3,11 @@ FastAPI application entry point for RAG Service.
 
 This module creates and configures the FastAPI application with
 lifecycle management, middleware, and capability registration.
+
+Architecture (3 Capabilities):
+- QueryCapability: Unified query pipeline with strategy switching
+- ManagementCapability: Document management and model discovery
+- TraceCapability: Health checks and trace observation
 """
 
 from contextlib import asynccontextmanager
@@ -13,7 +18,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from rag_service.api.routes import router
+from rag_service.api.qa_routes import router as qa_router
+from rag_service.api.kb_upload_routes import router as kb_upload_router
+from rag_service.api.unified_routes import router as unified_router
 from rag_service.capabilities.base import get_capability_registry
+# Unified capabilities (new)
+from rag_service.capabilities.query_capability import QueryCapability
+from rag_service.capabilities.management_capability import ManagementCapability
+from rag_service.capabilities.trace_capability import TraceCapability
+# Legacy capabilities kept for backward-compat during transition
 from rag_service.capabilities.external_kb_query import ExternalKBQueryCapability
 from rag_service.capabilities.health_check import HealthCheckCapability
 from rag_service.capabilities.knowledge_query import KnowledgeQueryCapability
@@ -21,12 +34,21 @@ from rag_service.capabilities.model_discovery import ModelDiscoveryCapability
 from rag_service.capabilities.model_inference import ModelInferenceCapability
 from rag_service.capabilities.trace_observation import TraceObservationCapability
 from rag_service.capabilities.document_management import DocumentManagementCapability
+from rag_service.capabilities.milvus_kb_upload import MilvusKBUploadCapability
+from rag_service.capabilities.query_quality import QueryQualityCapability
+from rag_service.capabilities.conversational_query import ConversationalQueryCapability
 from rag_service.config import get_settings
 from rag_service.core.logger import get_logger, set_trace_id
+from rag_service.services.session_store import SessionStoreService, get_session_store
+from rag_service.services.belief_state_store import BeliefStateStoreService, get_belief_state_store
 
 
 # Module logger
 logger = get_logger(__name__)
+
+
+# Redis client reference (for cleanup)
+_redis_client: Optional[any] = None
 
 
 @asynccontextmanager
@@ -35,34 +57,86 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Application lifespan context manager.
 
     Handles startup and shutdown events for the FastAPI application.
+    Registers 3 unified capabilities plus legacy capabilities for transition.
     """
+    global _redis_client
+
     settings = get_settings()
 
     # Startup
-    logger.info("Starting RAG Service MVP")
+    logger.info("Starting RAG Service")
     logger.info(f"Milvus: {settings.milvus.connection_url}")
-    logger.info(f"LiteLLM Model: {settings.litellm.model}")
-    logger.info(f"Langfuse Enabled: {settings.langfuse.enabled}")
+    logger.info(f"Provider: {settings.litellm.provider} ({settings.litellm.model})")
+    logger.info(f"Retrieval: {settings.query.retrieval_backend}")
+    logger.info(f"Quality: {settings.query.quality_mode}")
+    logger.info(f"Langfuse: {settings.langfuse.enabled}")
+
+    # Initialize Redis connection for session stores
+    try:
+        import aioredis
+
+        _redis_client = await aioredis.from_url(
+            f"redis://{settings.query.redis_host}:{settings.query.redis_port}/{settings.query.redis_db}",
+            password=settings.query.redis_password or None,
+            encoding="utf-8",
+            decode_responses=True,
+        )
+
+        # Configure session store with Redis client
+        SessionStoreService.set_redis_client(
+            redis_client=_redis_client,
+            ttl_seconds=settings.query.redis_ttl,
+        )
+
+        # Configure belief state store with Redis client
+        BeliefStateStoreService.set_redis_client(
+            redis_client=_redis_client,
+            ttl_seconds=settings.query.redis_ttl,
+        )
+
+        await _redis_client.ping()
+        logger.info("Redis connection verified")
+
+    except Exception as e:
+        logger.warning(
+            f"Redis connection failed: {e}. Session features will run without persistence.",
+            extra={"error": str(e)},
+        )
+        _redis_client = None
 
     # Initialize capability registry
     registry = get_capability_registry()
 
-    # Register capabilities
-    # Note: Components are injected as None for now - will be wired up properly
+    # Register 3 unified capabilities
+    registry.register(QueryCapability())
+    registry.register(ManagementCapability())
+    registry.register(TraceCapability())
+
+    # Register legacy capabilities (for backward-compat during transition)
     registry.register(HealthCheckCapability(capabilities=registry._capabilities))
     registry.register(KnowledgeQueryCapability(milvus_client=None))
     registry.register(ExternalKBQueryCapability())
     registry.register(ModelInferenceCapability(litellm_client=None))
-    registry.register(TraceObservationCapability(langfuse_client=None))
-    registry.register(DocumentManagementCapability(milvus_client=None))
+    registry.register(TraceObservationCapability(trace_manager=None))
+    registry.register(DocumentManagementCapability(knowledge_base=None))
     registry.register(ModelDiscoveryCapability(litellm_client=None))
+    registry.register(MilvusKBUploadCapability())
+    registry.register(QueryQualityCapability(config=settings.query_quality))
+    registry.register(ConversationalQueryCapability(config=settings.conversational_query))
 
     logger.info(f"Registered capabilities: {registry.list_capabilities()}")
 
     yield
 
     # Shutdown
-    logger.info("Shutting down RAG Service MVP")
+    logger.info("Shutting down RAG Service")
+
+    if _redis_client:
+        try:
+            await _redis_client.close()
+            logger.info("Redis connection closed")
+        except Exception as e:
+            logger.error(f"Error closing Redis connection: {e}")
 
 
 def create_app() -> FastAPI:
@@ -87,10 +161,10 @@ def create_app() -> FastAPI:
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors.origins,
-        allow_credentials=settings.cors.allow_credentials,
-        allow_methods=settings.cors.allow_methods,
-        allow_headers=settings.cors.allow_headers,
+        allow_origins=settings.server.cors_origins,
+        allow_credentials=settings.server.cors_allow_credentials,
+        allow_methods=settings.server.cors_allow_methods,
+        allow_headers=settings.server.cors_allow_headers,
     )
 
     # Add request logging middleware
@@ -131,8 +205,11 @@ def create_app() -> FastAPI:
             },
         )
 
-    # Include routes
+    # Include routes — unified first, then legacy (with deprecation headers)
+    app.include_router(unified_router, prefix="/api/v1")
     app.include_router(router)
+    app.include_router(qa_router)
+    app.include_router(kb_upload_router)
 
     # Root endpoint
     @app.get("/")

@@ -383,3 +383,354 @@ class TestFallbackConfiguration:
         # If primary is "gpt-3.5-turbo" and it fails, fallback should skip it
         # This is tested implicitly by the fallback logic
         assert len([m for m in gateway.fallback_models if m == "gpt-3.5-turbo"]) >= 0
+
+
+class TestHTTPCompletionGateway:
+    """Unit tests for HTTP Completion Gateway.
+
+    Tests verify:
+    - HTTP gateway initialization
+    - Response format parsing (OpenAI, simple, custom)
+    - Stream chunk parsing
+    - Retry with exponential backoff
+    """
+
+    @pytest.fixture
+    def http_gateway(self):
+        """Create HTTP gateway for testing."""
+        from rag_service.inference.gateway import HTTPCompletionGateway
+
+        return HTTPCompletionGateway(
+            url="http://test.example.com/v1/completions",
+            model="test-model",
+            timeout=30,
+            auth_token="test-token",
+            max_retries=3,
+            retry_delay=0.1,  # Short delay for tests
+        )
+
+    @pytest.mark.unit
+    def test_http_gateway_initialization(self, http_gateway) -> None:
+        """Test that HTTP gateway initializes correctly.
+
+        Given: URL and model configuration
+        When: HTTPCompletionGateway is created
+        Then: Gateway has correct configuration
+        """
+        assert http_gateway.url == "http://test.example.com/v1/completions"
+        assert http_gateway.model == "test-model"
+        assert http_gateway.timeout == 30
+        assert http_gateway.auth_token == "test-token"
+        assert http_gateway.max_retries == 3
+
+    @pytest.mark.unit
+    def test_parse_openai_style_response(self, http_gateway) -> None:
+        """Test parsing OpenAI-style response format.
+
+        Given: Response with "choices" array
+        When: _parse_completion_response is called
+        Then: Extracts text and usage correctly
+        """
+        response = {
+            "choices": [
+                {
+                    "text": "Generated text here",
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+            },
+        }
+
+        result = http_gateway._parse_completion_response(response)
+
+        assert result.text == "Generated text here"
+        assert result.input_tokens == 100
+        assert result.output_tokens == 50
+        assert result.provider == "http"
+
+    @pytest.mark.unit
+    def test_parse_simple_output_response(self, http_gateway) -> None:
+        """Test parsing simple output format.
+
+        Given: Response with "output" field
+        When: _parse_completion_response is called
+        Then: Extracts text correctly
+        """
+        response = {
+            "output": "Simple output text",
+            "finish_reason": "stop",
+        }
+
+        result = http_gateway._parse_completion_response(response)
+
+        assert result.text == "Simple output text"
+
+    @pytest.mark.unit
+    def test_parse_text_field_response(self, http_gateway) -> None:
+        """Test parsing text field format.
+
+        Given: Response with "text" field
+        When: _parse_completion_response is called
+        Then: Extracts text correctly
+        """
+        response = {
+            "text": "Text field content",
+        }
+
+        result = http_gateway._parse_completion_response(response)
+
+        assert result.text == "Text field content"
+
+    @pytest.mark.unit
+    def test_parse_result_field_response(self, http_gateway) -> None:
+        """Test parsing result field format.
+
+        Given: Response with "result" field
+        When: _parse_completion_response is called
+        Then: Extracts text correctly
+        """
+        response = {
+            "result": "Result field content",
+        }
+
+        result = http_gateway._parse_completion_response(response)
+
+        assert result.text == "Result field content"
+
+    @pytest.mark.unit
+    def test_parse_unexpected_response_raises_error(self, http_gateway) -> None:
+        """Test that unexpected response format raises error.
+
+        Given: Response with unrecognized format
+        When: _parse_completion_response is called
+        Then: Raises ValueError
+        """
+        response = {
+            "unexpected_field": "some content",
+        }
+
+        with pytest.raises(ValueError, match="Unexpected response format"):
+            http_gateway._parse_completion_response(response)
+
+    @pytest.mark.unit
+    def test_parse_stream_chunk_openai_format(self, http_gateway) -> None:
+        """Test parsing OpenAI-style stream chunk.
+
+        Given: Chunk with "choices" array
+        When: _parse_stream_chunk is called
+        Then: Extracts text correctly
+        """
+        chunk = {
+            "choices": [
+                {
+                    "text": "Hello",
+                }
+            ]
+        }
+
+        text = http_gateway._parse_stream_chunk(chunk)
+
+        assert text == "Hello"
+
+    @pytest.mark.unit
+    def test_parse_stream_chunk_delta_format(self, http_gateway) -> None:
+        """Test parsing delta format stream chunk.
+
+        Given: Chunk with "delta" content
+        When: _parse_stream_chunk is called
+        Then: Extracts text correctly
+        """
+        chunk = {
+            "choices": [
+                {
+                    "delta": {
+                        "content": "World",
+                    }
+                }
+            ]
+        }
+
+        text = http_gateway._parse_stream_chunk(chunk)
+
+        assert text == "World"
+
+    @pytest.mark.unit
+    def test_parse_stream_chunk_simple_text(self, http_gateway) -> None:
+        """Test parsing simple text stream chunk.
+
+        Given: Chunk with "text" field
+        When: _parse_stream_chunk is called
+        Then: Extracts text correctly
+        """
+        chunk = {
+            "text": "Simple",
+        }
+
+        text = http_gateway._parse_stream_chunk(chunk)
+
+        assert text == "Simple"
+
+    @pytest.mark.unit
+    def test_parse_stream_chunk_empty(self, http_gateway) -> None:
+        """Test parsing empty stream chunk.
+
+        Given: Chunk with no recognizable text
+        When: _parse_stream_chunk is called
+        Then: Returns empty string
+        """
+        chunk = {
+            "unexpected": "content",
+        }
+
+        text = http_gateway._parse_stream_chunk(chunk)
+
+        assert text == ""
+
+    @pytest.mark.unit
+    def test_http_gateway_requires_url(self) -> None:
+        """Test that HTTP gateway raises error without URL.
+
+        Given: Gateway with no URL configured
+        When: complete is called
+        Then: Raises ValueError
+        """
+        from rag_service.inference.gateway import HTTPCompletionGateway
+
+        gateway = HTTPCompletionGateway(url="", model="test")
+
+        with pytest.raises(ValueError, match="URL is not configured"):
+            gateway.complete("Test prompt")
+
+    @pytest.mark.unit
+    def test_get_available_models(self, http_gateway) -> None:
+        """Test that get_available_models returns correct list.
+
+        Given: Configured HTTP gateway
+        When: get_available_models is called
+        Then: Returns list with single model
+        """
+        models = http_gateway.get_available_models()
+
+        assert len(models) == 1
+        assert models[0]["model_id"] == "test-model"
+        assert models[0]["provider"] == "http"
+        assert models[0]["available"] is True
+
+    @pytest.mark.unit
+    def test_get_available_models_empty_without_url(self) -> None:
+        """Test that get_available_models returns empty list without URL.
+
+        Given: Gateway without URL
+        When: get_available_models is called
+        Then: Returns empty list
+        """
+        from rag_service.inference.gateway import HTTPCompletionGateway
+
+        gateway = HTTPCompletionGateway(url="", model="test")
+        models = gateway.get_available_models()
+
+        assert len(models) == 0
+
+
+class TestGatewayBackendSelection:
+    """Unit tests for gateway backend selection in ModelInferenceCapability.
+
+    Tests verify:
+    - Gateway backend selection (litellm vs http)
+    - Fallback behavior
+    - Configuration handling
+    """
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_capability_supports_http_backend(self) -> None:
+        """Test that ModelInferenceCapability supports HTTP backend.
+
+        Given: Input with gateway_backend="http"
+        When: execute is called
+        Then: Uses HTTP gateway for inference
+        """
+        from rag_service.capabilities.model_inference import (
+            ModelInferenceCapability,
+            ModelInferenceInput,
+        )
+        from rag_service.inference.gateway import CompletionResult
+        from unittest.mock import AsyncMock, patch
+
+        # Mock HTTP gateway
+        mock_http_gateway = AsyncMock()
+        mock_http_gateway.acomplete = AsyncMock(
+            return_value=CompletionResult(
+                text="HTTP response",
+                model="http-model",
+                input_tokens=10,
+                output_tokens=20,
+                total_tokens=30,
+                cost=0.0,
+                latency_ms=100,
+                provider="http",
+            )
+        )
+
+        capability = ModelInferenceCapability(
+            http_client=mock_http_gateway,
+            default_gateway="http",
+        )
+
+        input_data = ModelInferenceInput(
+            prompt="Test prompt",
+            gateway_backend="http",
+        )
+
+        result = await capability.execute(input_data)
+
+        assert result.text == "HTTP response"
+        mock_http_gateway.acomplete.assert_called_once()
+
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_capability_falls_back_to_litellm_by_default(self) -> None:
+        """Test that ModelInferenceCapability defaults to LiteLLM.
+
+        Given: Input without gateway_backend specified
+        When: execute is called
+        Then: Uses LiteLLM gateway
+        """
+        from rag_service.capabilities.model_inference import (
+            ModelInferenceCapability,
+            ModelInferenceInput,
+        )
+        from rag_service.inference.gateway import CompletionResult
+        from unittest.mock import AsyncMock
+
+        # Mock LiteLLM gateway
+        mock_litellm = AsyncMock()
+        mock_litellm.acomplete = AsyncMock(
+            return_value=CompletionResult(
+                text="LiteLLM response",
+                model="gpt-3.5-turbo",
+                input_tokens=10,
+                output_tokens=20,
+                total_tokens=30,
+                cost=0.01,
+                latency_ms=150,
+                provider="openai",
+            )
+        )
+
+        capability = ModelInferenceCapability(
+            litellm_client=mock_litellm,
+            default_gateway="litellm",
+        )
+
+        input_data = ModelInferenceInput(
+            prompt="Test prompt",
+        )
+
+        result = await capability.execute(input_data)
+
+        assert result.text == "LiteLLM response"
+        mock_litellm.acomplete.assert_called_once()

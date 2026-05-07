@@ -1,0 +1,293 @@
+# RAG Service Prompt Templates
+# All prompt templates for RAG QA Pipeline
+#
+# These templates are managed by Prompt Service and support:
+# - Version control
+# - A/B testing
+# - Online editing without deployment
+# - Trace analysis
+
+templates:
+  # ============================================
+  # Query Rewrite Prompt
+  # ============================================
+  - template_id: qa_query_rewrite
+    name: QA Query Rewrite
+    description: 查询重写 prompt，将用户查询优化为更具体的检索形式
+    version: 1
+    created_by: system
+    tags: [qa, query-rewrite, retrieval]
+    is_active: true
+    is_published: true
+    sections:
+      - name: role
+        content: 你是一个专业的查询优化助手。你的任务是将用户的查询重写为更具体、更容易检索的形式。
+        order: 0
+      - name: input
+        content: |
+          原始查询: {{original_query}}
+
+          上下文信息:
+          {{context_str}}
+          当前日期: {{current_year}}年{{current_month}}月
+        order: 1
+      - name: rules
+        content: |
+          重写规则:
+          1. 保持查询的原意不变
+          2. 添加时间上下文（例如：将"春节"改为"{{current_year}}年春节"）
+          3. 使用更正式、更具体的术语
+          4. 如果查询涉及公司制度，添加"公司"或"制度"等关键词
+          5. 保持查询简洁，不要添加不相关的信息
+          6. 只返回重写后的查询，不要解释
+        order: 2
+      - name: output
+        content: 重写后的查询:
+        order: 3
+    variables:
+      original_query:
+        description: 原始用户查询
+        type: string
+        is_required: true
+      context_str:
+        description: 上下文信息（如公司信息、历史记录等）
+        type: string
+        default_value: ""
+        is_required: false
+      current_year:
+        description: 当前年份
+        type: string
+        is_required: true
+      current_month:
+        description: 当前月份
+        type: string
+        is_required: true
+
+  # ============================================
+  # Answer Generation Prompt (Standard)
+  # ============================================
+  - template_id: qa_answer_generation
+    name: QA Answer Generation
+    description: 标准答案生成 prompt，基于检索文档回答用户问题
+    version: 1
+    created_by: system
+    tags: [qa, generation, answer]
+    is_active: true
+    is_published: true
+    sections:
+      - name: role
+        content: You are a helpful assistant that answers questions based on the provided document excerpts.
+        order: 0
+      - name: input
+        content: |
+          User question: {{query}}
+
+          Relevant document excerpts:
+          {{chunks_text}}
+        order: 1
+      - name: instructions
+        content: |
+          Instructions:
+          1. Answer the question using ONLY the information from the provided excerpts
+          2. If the excerpts don't contain enough information, say so clearly
+          3. Cite the source documents in your answer using the document names
+          4. Be accurate and concise
+          5. Use the same language as the question (Chinese or English)
+        order: 2
+      - name: output
+        content: |
+          Answer:
+        order: 3
+    variables:
+      query:
+        description: 用户问题
+        type: string
+        is_required: true
+      chunks_text:
+        description: 检索到的文档片段
+        type: string
+        is_required: true
+
+  # ============================================
+  # Answer Generation Prompt (Strict)
+  # ============================================
+  - template_id: qa_answer_generation_strict
+    name: QA Answer Generation (Strict)
+    description: 严格答案生成 prompt，用于幻觉检测失败后的重新生成
+    version: 1
+    created_by: system
+    tags: [qa, generation, strict, anti-hallucination]
+    is_active: true
+    is_published: true
+    sections:
+      - name: role
+        content: You are a helpful assistant that answers questions STRICTLY based on the provided document excerpts.
+        order: 0
+      - name: input
+        content: |
+          User question: {{query}}
+
+          Relevant document excerpts:
+          {{chunks_text}}
+        order: 1
+      - name: instructions
+        content: |
+          CRITICAL INSTRUCTIONS:
+          1. You MUST answer using ONLY the information from the provided excerpts
+          2. Do NOT include any information that is not explicitly stated in the excerpts
+          3. If the excerpts don't contain enough information, say "根据现有信息，我无法完全回答这个问题" clearly
+          4. Cite the source documents in your answer using the document names
+          5. Be accurate and concise
+          6. Use the same language as the question (Chinese or English)
+
+          Remember: It is better to say you don't know than to make up information.
+        order: 2
+      - name: output
+        content: |
+          Answer:
+        order: 3
+    variables:
+      query:
+        description: 用户问题
+        type: string
+        is_required: true
+      chunks_text:
+        description: 检索到的文档片段
+        type: string
+        is_required: true
+
+  # ============================================
+  # Hallucination Detection Prompt
+  # ============================================
+  - template_id: qa_hallucination_detection
+    name: QA Hallucination Detection
+    description: 幻觉检测 prompt，验证答案是否基于检索内容
+    version: 1
+    created_by: system
+    tags: [qa, validation, hallucination-detection]
+    is_active: true
+    is_published: true
+    sections:
+      - name: role
+        content: 你是一个专业的事实核查助手。你的任务是验证给定的回答是否基于提供的参考内容。
+        order: 0
+      - name: input
+        content: |
+          参考内容:
+          {{context}}
+
+          待验证的回答:
+          {{answer}}
+        order: 1
+      - name: instructions
+        content: |
+          请分析待验证的回答，判断其是否符合以下标准：
+          1. 回答中的关键信息都能在参考内容中找到依据
+          2. 没有凭空捏造参考内容中没有的信息
+          3. 没有对参考内容进行歪曲或错误解读
+
+          请以JSON格式返回你的分析结果，格式如下:
+          {
+              "is_supported": true/false,
+              "confidence": 0.0-1.0之间的置信度分数,
+              "reasoning": "详细的分析理由，说明回答是否符合事实以及为什么",
+              "issues": ["列出回答中可能存在的问题或没有依据的内容，如果没有则返回空数组"]
+          }
+
+          请只返回JSON，不要包含其他内容:
+        order: 2
+    variables:
+      context:
+        description: 检索到的参考内容
+        type: string
+        is_required: true
+      answer:
+        description: 待验证的生成回答
+        type: string
+        is_required: true
+
+  # ============================================
+  # RAG Agent System Instructions
+  # ============================================
+  - template_id: rag_agent_instructions
+    name: RAG Agent Instructions
+    description: RAG Agent 系统指令，用于 agent.py 中的 RAG Agent
+    version: 1
+    created_by: system
+    tags: [agent, rag, system-instructions]
+    is_active: true
+    is_published: true
+    sections:
+      - name: role
+        content: You are a helpful AI assistant that answers questions based on retrieved context.
+        order: 0
+      - name: input_format
+        content: |
+          [Retrieved Context]
+          {{context}}
+
+          [User Question]
+          {{question}}
+        order: 1
+      - name: instructions
+        content: |
+          [Instructions]
+          Based on the retrieved context above, answer the user's question. If the context doesn't contain relevant information, say so explicitly. Use specific details from the context when possible.
+        order: 2
+    variables:
+      context:
+        description: 检索到的上下文
+        type: string
+        is_required: true
+      question:
+        description: 用户问题
+        type: string
+        is_required: true
+
+  # ============================================
+  # Fallback Response Prompt
+  # ============================================
+  - template_id: qa_fallback_response
+    name: QA Fallback Response
+    description: 知识库不可用时的默认回复模板
+    version: 1
+    created_by: system
+    tags: [qa, fallback, error-handling]
+    is_active: true
+    is_published: true
+    sections:
+      - name: response
+        content: 抱歉，知识库暂时无法访问。请稍后再试或联系管理员获取帮助。
+        order: 0
+    variables: {}
+
+# ============================================
+# A/B Test Configurations
+# ============================================
+ab_tests:
+  - test_id: qa_generation_ab_test
+    name: QA Answer Generation A/B Test
+    description: 对比标准 prompt 和严格 prompt 的效果
+    template_id: qa_answer_generation
+    created_by: system
+    created_at: "2026-04-03T00:00:00Z"
+    status: draft
+    traffic_percentage: 50
+    variants:
+      - variant_id: control
+        name: Standard Prompt
+        template_id: qa_answer_generation
+        is_control: true
+        weight: 50
+      - variant_id: treatment
+        name: Strict Prompt
+        template_id: qa_answer_generation_strict
+        is_control: false
+        weight: 50
+    success_metrics:
+      - name: hallucination_rate
+        threshold: 0.3
+        direction: lower_is_better
+      - name: user_satisfaction
+        threshold: 0.7
+        direction: higher_is_better

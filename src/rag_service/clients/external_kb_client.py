@@ -7,6 +7,10 @@ It handles request/response transformation and error handling.
 
 import asyncio
 import json
+import logging
+import os
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -19,6 +23,121 @@ from rag_service.core.logger import get_logger
 # Module logger
 logger = get_logger(__name__)
 
+
+# ============================================================================
+# HTTP Request/Response Logger
+# ============================================================================
+
+class KBHttpLogger:
+    """
+    Logger for external KB HTTP requests and responses.
+
+    Logs are saved to logs/external_kb_http.jsonl with full request/response details.
+    """
+
+    def __init__(self, log_dir: str = "logs"):
+        """Initialize the HTTP logger.
+
+        Args:
+            log_dir: Directory to store log files.
+        """
+        self._log_dir = Path(log_dir)
+        self._log_dir.mkdir(parents=True, exist_ok=True)
+        self._log_file = self._log_dir / "external_kb_http.jsonl"
+        self._enabled = os.getenv("EXTERNAL_KB_HTTP_LOG", "true").lower() == "true"
+
+    def log_request_response(
+        self,
+        request_url: str,
+        request_headers: Dict[str, str],
+        request_body: Dict[str, Any],
+        response_status: int,
+        response_headers: Dict[str, str],
+        response_body: Dict[str, Any],
+        latency_ms: float,
+        error: Optional[str] = None,
+    ) -> None:
+        """Log a complete HTTP request/response pair.
+
+        Args:
+            request_url: The request URL.
+            request_headers: Request headers (sensitive values masked).
+            request_body: Request payload.
+            response_status: HTTP status code.
+            response_headers: Response headers.
+            response_body: Response payload.
+            latency_ms: Request latency in milliseconds.
+            error: Error message if request failed.
+        """
+        if not self._enabled:
+            return
+
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "request": {
+                "url": request_url,
+                "headers": self._mask_sensitive_headers(request_headers),
+                "body": request_body,
+            },
+            "response": {
+                "status": response_status,
+                "headers": dict(response_headers) if response_headers else {},
+                "body": response_body if not error else None,
+            },
+            "latency_ms": round(latency_ms, 2),
+            "error": error,
+        }
+
+        try:
+            with open(self._log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+        except Exception as e:
+            logger.warning(f"Failed to write HTTP log: {e}")
+
+    def _mask_sensitive_headers(self, headers: Dict[str, str]) -> Dict[str, str]:
+        """Mask sensitive header values.
+
+        Args:
+            headers: Original headers.
+
+        Returns:
+            Headers with sensitive values masked.
+        """
+        masked = {}
+        sensitive_keys = {"authorization", "xtoken", "x-api-key", "token"}
+
+        for key, value in headers.items():
+            if key.lower() in sensitive_keys:
+                # Show first 8 and last 4 characters
+                if len(value) > 12:
+                    masked[key] = f"{value[:8]}...{value[-4:]}"
+                else:
+                    masked[key] = "***"
+            else:
+                masked[key] = value
+
+        return masked
+
+
+# Global HTTP logger instance
+_kb_http_logger: Optional[KBHttpLogger] = None
+
+
+def get_kb_http_logger() -> KBHttpLogger:
+    """Get the global KB HTTP logger instance.
+
+    Returns:
+        KBHttpLogger instance.
+    """
+    global _kb_http_logger
+    if _kb_http_logger is None:
+        _kb_http_logger = KBHttpLogger()
+    return _kb_http_logger
+
+
+# ============================================================================
+# External KB Models
+# ============================================================================
 
 class ExternalKBRequest(BaseModel):
     """Request model for external knowledge base API."""
@@ -70,13 +189,32 @@ class ExternalKBResponse(BaseModel):
 
 
 class ExternalKBClientConfig(BaseModel):
-    """Configuration for external knowledge base client."""
+    """Configuration for external knowledge base client.
+
+    Supports flexible authentication through custom HTTP headers or simple auth token.
+    """
 
     base_url: str = Field(..., description="Base URL of the external KB service")
     endpoint: str = Field("/cloudoa-ai/ai/file-knowledge/queryKnowledge", description="API endpoint")
     timeout: int = Field(30, description="Request timeout in seconds")
     max_retries: int = Field(3, description="Maximum retry attempts")
-    xtoken: str = Field("", description="X-Token header for authentication")
+
+    # Flexible authentication options
+    headers: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Custom HTTP headers (e.g., {'Authorization': 'Bearer token', 'x-api-key': 'key'})"
+    )
+    auth_token: str = Field(
+        "",
+        description="Auth token for 'Authorization: Bearer <token>' header (shortcut for common pattern)"
+    )
+
+    # Deprecated: use 'headers' or 'auth_token' instead
+    xtoken: str = Field(
+        "",
+        deprecated="Use 'headers'={'xtoken': 'xxx'} or 'auth_token' instead",
+        description="X-Token header (deprecated, use 'headers' dict for flexibility)"
+    )
 
 
 class ExternalKBClient:
@@ -122,12 +260,12 @@ class ExternalKBClient:
         self,
         query: str,
         comp_id: str,
-        file_type: str = "PublicDocDispatch",
+        file_type: str = None,
         doc_date: str = "",
         keyword: str = "",
         topk: int = 10,
         score_min: float = 0.0,
-        search_type: int = 1,
+        search_type: int = 2,
     ) -> List[Dict[str, Any]]:
         """
         Query the external knowledge base.
@@ -135,7 +273,7 @@ class ExternalKBClient:
         Args:
             query: Primary search query.
             comp_id: Company unique code (e.g., N000131).
-            file_type: File type (PublicDocReceive or PublicDocDispatch).
+            file_type: File type (PublicDocReceive or PublicDocDispatch or None).
             doc_date: Optional document date filter.
             keyword: Optional secondary keyword.
             topk: Number of results to return.
@@ -176,6 +314,10 @@ class ExternalKBClient:
         # Retry logic
         last_error = None
         for attempt in range(self._config.max_retries):
+            start_time = asyncio.get_event_loop().time()
+            request_body_dict = None
+            response_body_dict = None
+
             try:
                 # Build full URL to avoid path issues
                 # Ensure endpoint starts with / and base_url doesn't end with /
@@ -188,16 +330,32 @@ class ExternalKBClient:
 
                 # Build headers
                 headers = {"Content-Type": "application/json"}
-                if self._config.xtoken:
+
+                # Add authentication headers
+                # Priority: headers dict > auth_token > xtoken (deprecated)
+                if self._config.headers:
+                    headers.update(self._config.headers)
+                elif self._config.auth_token:
+                    headers["Authorization"] = f"Bearer {self._config.auth_token}"
+                elif self._config.xtoken:
+                    # Deprecated: xtoken for backward compatibility
                     headers["xtoken"] = self._config.xtoken
+
+                # Log authentication (without exposing sensitive values)
+                auth_keys = [k for k in headers.keys() if k.lower() in ("authorization", "xtoken", "x-api-key")]
+                if auth_keys:
+                    logger.debug(f"Using auth headers: {auth_keys}")
+                else:
+                    logger.debug("No authentication headers configured")
 
                 # Serialize JSON with ensure_ascii=True to match requests library behavior
                 # This is required because the external KB API expects Unicode escapes for Chinese characters
-                body = json.dumps(request.model_dump(by_alias=True, exclude_none=True), ensure_ascii=True)
+                body_str = json.dumps(request.model_dump(by_alias=True, exclude_none=True), ensure_ascii=True)
+                request_body_dict = request.model_dump(by_alias=True, exclude_none=True)
 
                 response = await client.post(
                     url,
-                    content=body.encode("utf-8"),
+                    content=body_str.encode("utf-8"),
                     headers=headers,
                 )
 
@@ -205,7 +363,22 @@ class ExternalKBClient:
 
                 # Parse response
                 data = response.json()
+                response_body_dict = data
                 logger.info(f"Raw response: code={data.get('code')}, msg={data.get('msg')}, result_count={len(data.get('result', []))}")
+
+                # Calculate latency
+                latency_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+
+                # Log HTTP request/response
+                get_kb_http_logger().log_request_response(
+                    request_url=url,
+                    request_headers=headers,
+                    request_body=request_body_dict,
+                    response_status=response.status_code,
+                    response_headers=dict(response.headers),
+                    response_body=response_body_dict,
+                    latency_ms=latency_ms,
+                )
 
                 # Check for error codes
                 if data.get('code') != 200:
@@ -230,6 +403,20 @@ class ExternalKBClient:
 
             except httpx.HTTPStatusError as e:
                 last_error = e
+                latency_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+
+                # Log failed request
+                get_kb_http_logger().log_request_response(
+                    request_url=url if 'url' in locals() else "unknown",
+                    request_headers=headers if 'headers' in locals() else {},
+                    request_body=request_body_dict if request_body_dict else {},
+                    response_status=e.response.status_code,
+                    response_headers=dict(e.response.headers),
+                    response_body={},
+                    latency_ms=latency_ms,
+                    error=str(e),
+                )
+
                 logger.warning(
                     "External KB query failed",
                     extra={
@@ -246,6 +433,20 @@ class ExternalKBClient:
 
             except httpx.RequestError as e:
                 last_error = e
+                latency_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+
+                # Log failed request
+                get_kb_http_logger().log_request_response(
+                    request_url=url if 'url' in locals() else "unknown",
+                    request_headers=headers if 'headers' in locals() else {},
+                    request_body=request_body_dict if request_body_dict else {},
+                    response_status=0,
+                    response_headers={},
+                    response_body={},
+                    latency_ms=latency_ms,
+                    error=str(e),
+                )
+
                 logger.warning(
                     "External KB request failed",
                     extra={
@@ -260,6 +461,20 @@ class ExternalKBClient:
 
             except Exception as e:
                 last_error = e
+                latency_ms = (asyncio.get_event_loop().time() - start_time) * 1000
+
+                # Log failed request
+                get_kb_http_logger().log_request_response(
+                    request_url=url if 'url' in locals() else "unknown",
+                    request_headers=headers if 'headers' in locals() else {},
+                    request_body=request_body_dict if request_body_dict else {},
+                    response_status=0,
+                    response_headers={},
+                    response_body={},
+                    latency_ms=latency_ms,
+                    error=str(e),
+                )
+
                 logger.error(
                     "External KB query unexpected error",
                     extra={"error": str(e)},
@@ -355,13 +570,25 @@ async def get_external_kb_client() -> ExternalKBClient:
                 detail="Set EXTERNAL_KB_BASE_URL environment variable",
             )
 
-        config = ExternalKBClientConfig(
-            base_url=settings.external_kb.base_url,
-            endpoint=getattr(settings.external_kb, "endpoint", "/cloudoa-ai/ai/file-knowledge/queryKnowledge"),
-            xtoken=getattr(settings.external_kb, "token", ""),
-            timeout=getattr(settings.external_kb, "timeout", 30),
-            max_retries=getattr(settings.external_kb, "max_retries", 3),
-        )
+        # Build config with new authentication pattern
+        config_kwargs = {
+            "base_url": settings.external_kb.base_url,
+            "endpoint": getattr(settings.external_kb, "endpoint", "/cloudoa-ai/ai/file-knowledge/queryKnowledge"),
+            "timeout": getattr(settings.external_kb, "timeout", 30),
+            "max_retries": getattr(settings.external_kb, "max_retries", 3),
+        }
+
+        # Use new authentication pattern with priority
+        # Priority: headers dict > auth_token > token (deprecated)
+        if hasattr(settings.external_kb, "headers") and settings.external_kb.headers:
+            config_kwargs["headers"] = settings.external_kb.headers
+        elif hasattr(settings.external_kb, "auth_token") and settings.external_kb.auth_token:
+            config_kwargs["auth_token"] = settings.external_kb.auth_token
+        elif hasattr(settings.external_kb, "token") and settings.external_kb.token:
+            # Deprecated: use headers or auth_token instead
+            config_kwargs["xtoken"] = settings.external_kb.token
+
+        config = ExternalKBClientConfig(**config_kwargs)
         _external_kb_client = ExternalKBClient(config)
 
     return _external_kb_client
